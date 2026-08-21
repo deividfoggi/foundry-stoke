@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "last_updated": "2026-08-21T15:00:41Z",
+  "files": {
+    ".github/copilot-instructions.md": {
+      "plugin_version": "unknown",
+      "template_sha": "de285dac4299",
+      "written_at": "2026-08-21T15:00:40Z"
+    },
+    ".github/instructions/adrs.instructions.md": {
+      "plugin_version": "unknown",
+      "template_sha": "f5e8293d4b3b",
+      "written_at": "2026-08-21T15:00:40Z"
+    },
+    ".github/instructions/envisioning.instructions.md": {
+      "plugin_version": "unknown",
+      "template_sha": "977f2439d1e7",
+      "written_at": "2026-08-21T15:00:40Z"
+    },
+    ".github/instructions/specs.instructions.md": {
+      "plugin_version": "unknown",
+      "template_sha": "538e3f162d61",
+      "written_at": "2026-08-21T15:00:40Z"
+    },
+    ".github/instructions/tasks.instructions.md": {
+      "plugin_version": "unknown",
+      "template_sha": "3f63686c57bb",
+      "written_at": "2026-08-21T15:00:40Z"
+    },
+    ".github/instructions/migration-specs.instructions.md": {
+      "plugin_version": "unknown",
+      "template_sha": "f0b00cbefd3a",
+      "written_at": "2026-08-21T15:00:40Z"
+    },
+    ".github/instructions/migration-tasks.instructions.md": {
+      "plugin_version": "unknown",
+      "template_sha": "bd6d004b4dcd",
+      "written_at": "2026-08-21T15:00:40Z"
+    },
+    ".github/instructions/documentation-style.instructions.md": {
+      "plugin_version": "unknown",
+      "template_sha": "18bce5ed4fea",
+      "written_at": "2026-08-21T15:00:40Z"
+    },
+    ".github/docs/coding-guidelines.md": {
+      "plugin_version": "unknown",
+      "template_sha": "ca2bae8e5651",
+      "written_at": "2026-08-21T15:00:40Z"
+    },
+    ".markdownlint.yaml": {
+      "plugin_version": "unknown",
+      "template_sha": "32e6656eec3b",
+      "written_at": "2026-08-21T15:00:40Z"
+    },
+    "docs/features/TEMPLATE.md": {
+      "plugin_version": "unknown",
+      "template_sha": "9103b999a9a6",
+      "written_at": "2026-08-21T15:00:40Z"
+    },
+    "docs/migrations/TEMPLATE.md": {
+      "plugin_version": "unknown",
+      "template_sha": "7b469de0b588",
+      "written_at": "2026-08-21T15:00:40Z"
+    },
+    "docs/envisioning/TEMPLATE.md": {
+      "plugin_version": "unknown",
+      "template_sha": "85f38f13a6ee",
+      "written_at": "2026-08-21T15:00:41Z"
+    },
+    "docs/architecture/decisions/ADR-TEMPLATE.md": {
+      "plugin_version": "unknown",
+      "template_sha": "6250a631e6da",
+      "written_at": "2026-08-21T15:00:41Z"
+    }
+  }
+}

@@ -1,0 +1,57 @@
+# ---- General ----
+.DS_Store
+*.log
+*.tmp
+*.bak
+.env
+.env.*
+!.env.example
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+
+# ---- Python (python/) ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.python-version
+
+# ---- .NET (dotnet/) ----
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+.vs/
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+project.lock.json
+artifacts/
+
+# ---- Stoke local state / dev store ----
+.stoke/
+*.stoke-store/
+
+# ---- SBOM / build outputs ----
+sbom/
+*.sbom.json
