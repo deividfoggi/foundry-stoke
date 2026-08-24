@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "foundry-stoke"
+version = "0.1.0b1"
+description = "Control-plane library for Foundry hosted agent instances (durable store, session lifecycle, auth)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Deivid de Foggi" }]
+keywords = ["azure", "foundry", "agents", "control-plane"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+]
+# Core is intentionally dependency-free: it must not couple to a store SDK
+# (CC-004, FR-011) nor require the Foundry SDK to import. Optional extras below
+# provide the real adapters.
+dependencies = []
+
+[project.optional-dependencies]
+# Real Foundry control-plane + Entra ID auth adapters. Isolated behind seams so
+# the core and its tests do not require these packages (research.md, ADR 0005).
+azure = [
+    "azure-ai-projects>=2.3.0",
+    "azure-identity>=1.15.0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+[project.urls]
+Homepage = "https://github.com/deividfoggi/foundry-stoke"
+Repository = "https://github.com/deividfoggi/foundry-stoke"
+Issues = "https://github.com/deividfoggi/foundry-stoke/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+files = ["src"]
+mypy_path = "src"
+
+# Optional adapters (azure-ai-projects, azure-identity) are isolated behind lazy
+# imports and are only present with the 'azure' extra installed.
+[[tool.mypy.overrides]]
+module = ["azure.*"]
+ignore_missing_imports = true

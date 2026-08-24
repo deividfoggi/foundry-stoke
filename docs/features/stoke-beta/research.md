@@ -2,7 +2,7 @@
 
 - **Criado em**: 2026-08-21
 - **Status**: Finalizado (decisões fechadas; gaps/NEEDS RESEARCH registrados como assunções)
-- **Spec base**: docs/features/stoke-beta/spec.md (v1.2)
+- **Spec base**: docs/features/stoke-beta/spec.md (v1.3)
 
 Este documento consolida o mapeamento das superfícies oficiais do Foundry por linguagem
 para o control-plane de sessão, o que a plataforma provê nativamente e o que a Stoke
@@ -15,17 +15,27 @@ uma API inventada (FR-018).
 | Fonte | Uso |
 |-------|-----|
 | learn.microsoft.com/azure/foundry/agents/how-to/manage-hosted-sessions | API de sessão (control-plane), pivots rest/python/azd |
-| learn.microsoft.com/azure/foundry/agents/concepts/hosted-agents | Ciclo Active/Idle/Resumed, idle timeout, isolamento, observabilidade |
+| learn.microsoft.com/azure/foundry/agents/concepts/hosted-agents | Ciclo de vida de sessão, idle timeout, isolamento, observabilidade |
+| learn.microsoft.com/en-us/javascript/api/@azure/ai-projects/agentsessionstatus | Enum oficial `AgentSessionStatus` (valores confirmados; ver "Fatos confirmados") |
 | learn.microsoft.com/agent-framework/hosting/foundry-hosted-agent | Hosting SDK (Python/C#/Go), auth, variáveis de ambiente |
 
 ## Fatos confirmados na plataforma (independentes de linguagem)
 
-- **Ciclo de compute da sessão**: `Active` (compute rodando) -> `Idle` (sem requisição
-  além do idle timeout; plataforma desprovisiona compute e persiste `$HOME`/`/files`) ->
-  `Resumed` (mesma `agent_session_id` referenciada de novo; plataforma provisiona novo
-  compute e restaura o estado).
-- **`Resumed` NÃO é uma operação explícita**: é o efeito de referenciar novamente uma
-  sessão ociosa. Não há endpoint "resume"; retomar acontece ao invocar/referenciar.
+- **Status oficial de sessão (`AgentSessionStatus`) — CONFIRMADO**: o status é um enum
+  oficial em `azure-ai-projects`, exposto como `AgentSessionResource.status`, retornado pela
+  REST `/sessions` e como `session.status` nos SDKs Python/JS. Valores (strings minúsculas):
+  `creating`, `active`, `idle`, `updating`, `failed`, `deleting`, `deleted`, `expired`.
+  Fonte: https://learn.microsoft.com/en-us/javascript/api/@azure/ai-projects/agentsessionstatus
+  (mais os samples de create/get/list que imprimem `session.status`).
+- **Ciclo de vida da sessão**: `creating` -> `active` <-> `idle` -> (`updating` | `failed`
+  | `deleting` | `deleted` | `expired`). `active` (compute rodando) e `idle` (sem requisição
+  além do idle timeout; plataforma desprovisiona compute e persiste `$HOME`/`/files`)
+  alternam enquanto a sessão viver.
+- **"Resumed" NÃO é um status oficial**: retomar é o efeito de referenciar novamente uma
+  sessão `idle` (transição derivada `idle` -> `active`); a plataforma provisiona novo compute
+  e restaura o estado. Não há status "resumed" nem endpoint "resume". A Stoke reflete o efeito
+  via um marcador derivado (`resumed_at`), não via status. A assunção anterior de um status
+  "resumed" de primeira classe estava **incorreta** e foi corrigida (spec v1.3).
 - **Idle timeout**: configurável por versão de agente, 5-60 min (300-3600 s), padrão 15
   min (900 s). Definido na criação da versão via `session_configuration.idle_timeout_seconds`.
   Não é alterável em uma versão existente (versões são imutáveis; cria-se nova versão).
@@ -70,9 +80,10 @@ Pacote: `azure-ai-projects>=2.3.0` + `azure-identity`.
 | Probe genérico (Responses) | `project.get_openai_client(agent_name).responses.create(input=..., extra_body={"agent_session_id": id})` | Confirmado |
 
 Notas:
-- Valores concretos do enum de `status` (strings exatas para Active/Idle/Resumed) **não
-  estão documentados**. NEEDS RESEARCH: inspecionar em runtime/SDK e mapear para o enum
-  público da Stoke. A Stoke expõe um enum próprio e traduz.
+- Valores concretos do enum de `status` **estão confirmados** (RESOLVIDO): os oito valores
+  oficiais de `AgentSessionStatus` (ver "Fatos confirmados"). A Stoke expõe um enum próprio
+  (`SessionState` = 8 valores oficiais + `UNKNOWN`) e traduz case-insensitive; valor não
+  reconhecido -> `UNKNOWN`.
 - O SDK Python **não** provê cliente tipado de Invocations (a doc instrui usar `requests`).
   Isso reforça que o probe de Invocations é responsabilidade do usuário (FR-017).
 
@@ -153,8 +164,12 @@ oficial permanecem registrados como assunções (NEEDS RESEARCH), nunca como API
 
 ## Gaps conhecidos / NEEDS RESEARCH (assunções, não APIs inventadas)
 
-- **Strings do enum de status de sessão** (Active/Idle/Resumed) não documentadas: a Stoke
-  expõe enum próprio e traduz em runtime. Validar por inspeção de SDK/runtime.
+- **Strings do enum de status de sessão**: **RESOLVIDO (2026-08-24)**. `AgentSessionStatus` =
+  `creating`, `active`, `idle`, `updating`, `failed`, `deleting`, `deleted`, `expired`. A
+  Stoke traduz case-insensitive e usa `UNKNOWN` para valores não reconhecidos; "resumed" é
+  observação derivada, não status. Fonte:
+  https://learn.microsoft.com/en-us/javascript/api/@azure/ai-projects/agentsessionstatus.
+  A assunção anterior de um status "resumed" estava incorreta.
 - **Se `create_session`/`GET /sessions/{id}` resetam o idle timer** não está documentado.
   Assunção: não resetam; por isso o keepalive usa um probe mínimo e o scheduler do pool
   reusa o `WarmupProbe` para renovar sessões. Validar empiricamente antes do GA.

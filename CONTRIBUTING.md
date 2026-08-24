@@ -76,3 +76,67 @@ termos da Apache-2.0.
 
 Ao participar deste projeto, você concorda em seguir o
 [Código de Conduta](CODE_OF_CONDUCT.md).
+
+## Releasing (Python)
+
+O pacote Python (`foundry-stoke`) é publicado no PyPI via **Trusted Publishing
+(OIDC)**. Nenhum token de PyPI/TestPyPI é armazenado no repositório. O release é
+independente por linguagem: tags Python usam o prefixo `python-v*` (ex.:
+`python-v0.1.0b1`), de forma que futuras tags de .NET nunca colidam.
+
+O pipeline (`.github/workflows/release.yml`) tem três estágios encadeados:
+
+1. `build`: gera sdist + wheel a partir de `python/`, roda `twine check`, gera um
+   SBOM CycloneDX e sobe os artefatos.
+2. `publish-testpypi` (environment `testpypi`): publica no TestPyPI como dry-run.
+3. `publish-pypi` (environment `pypi`, protegido): publica no PyPI somente após o
+   dry-run no TestPyPI e após **aprovação manual** do environment.
+
+### Setup manual único do mantenedor (Trusted Publisher)
+
+Antes do primeiro release, configure um "pending publisher" (Trusted Publisher)
+nos dois índices. Isso é feito uma única vez pela interface web:
+
+- No **test.pypi.org** (Account settings > Publishing > Add a pending publisher):
+  - Repository owner: `deividfoggi`
+  - Repository name: `foundry-stoke`
+  - Workflow filename: `release.yml`
+  - Environment name: `testpypi`
+- No **pypi.org** (mesmo caminho):
+  - Repository owner: `deividfoggi`
+  - Repository name: `foundry-stoke`
+  - Workflow filename: `release.yml`
+  - Environment name: `pypi`
+
+Configure também os GitHub Environments `testpypi` e `pypi` no repositório; marque
+`pypi` como protegido, exigindo aprovação manual (Required reviewers).
+
+> A disponibilidade do nome `foundry-stoke` no índice só é confirmada quando o
+> TestPyPI aceita o primeiro upload. Se o nome estiver tomado, ajuste antes de
+> promover para o PyPI.
+
+### Como cortar um release
+
+1. Atualize `version` em `python/pyproject.toml` (PEP 440; beta usa sufixo `bN`,
+   ex.: `0.1.0b1`).
+2. Faça commit e crie a tag correspondente:
+
+   ```bash
+   git tag python-v0.1.0b1
+   git push origin python-v0.1.0b1
+   ```
+
+3. O workflow `release.yml` roda: build + SBOM, publica no TestPyPI (dry-run) e
+   para no gate do environment `pypi`.
+4. Aprove o environment `pypi` no GitHub para promover do TestPyPI para o PyPI.
+
+### Supply-chain
+
+- `.github/dependabot.yml` monitora `pip` (em `/python`) e `github-actions` (em
+  `/`), semanalmente.
+- O SBOM CycloneDX é gerado no estágio de build de cada release e anexado como
+  artefato (`python-sbom`).
+- O core permanece sem dependências de runtime; a reprodutibilidade de CI é dada
+  pelo `setup-python` e pela instalação explícita dos extras, sem lockfile que
+  conflite com o core zero-dep.
+

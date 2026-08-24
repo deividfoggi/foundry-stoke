@@ -20,7 +20,7 @@ sendo enviado pela aplicação via SDK oficial do Foundry. A Stoke cobre cinco c
 
 1. Store durável via provider desacoplado (modelo compatível com Cosmos, sem acoplamento).
 2. Aquecimento de sessões (pré-provisionamento de pool e keepalive por probe plugável).
-3. Controle de sessão/estado (Active/Idle/Resumed, idle timeout 5-60 min).
+3. Controle de sessão/estado (status oficial `AgentSessionStatus` + `UNKNOWN`, retomada derivada, idle timeout 5-60 min).
 4. Integração com o Foundry no control-plane de sessão (criar/referenciar/retomar/consultar).
 5. Consistência de API semanticamente equivalente entre Python e .NET (Go adiado).
 
@@ -179,8 +179,7 @@ independentes por linguagem, cada uma com sua tag/semver.
 | Sem SDK Foundry oficial para Go | Alto | **Go adiado** (ADR 0004); contrato projetado para admitir Go depois sem quebra |
 | Session control típado não confirmado em .NET | Médio | REST fallback via `Azure.Core` atrás de `ISessionController` (ADR 0005); migra para típado sem quebra |
 | Semântica de "atividade" que reseta idle timer não documentada | Médio | Probe reusado para renovar pool; validar empiricamente (NEEDS RESEARCH em research.md) |
-| Enum de status de sessão não documentado | Baixo | Enum próprio + tradução em runtime (ADR 0005) |
-| Advisory file lock não porta para NFS/SMB | Baixo | Provider FileSystem é para dev local; documentado (ADR 0001) |
+| Enum de status de sessão não documentado | Baixo | Enum próprio + tradução em runtime (ADR 0005) || Advisory file lock não porta para NFS/SMB | Baixo | Provider FileSystem é para dev local; documentado (ADR 0001) |
 | Scheduler bloquear thread por engano | Médio | Hard constraint não bloqueante + clock injetável com delay async (ADR 0003) |
 
 ## Comandos

@@ -53,6 +53,26 @@ Restrição (invariante): nenhuma implementação no core pode importar SDK de s
 produção (Cosmos/Table/Redis) (CC-004, SC-002). Um provider externo (ex.: Cosmos)
 implementa esta mesma interface sem alterar o core (FR-009).
 
+## Responsabilidades do autor de um provider externo
+
+O contrato é intencionalmente minimalista e foi modelado para bancos de documento
+(id + partitionKey + etag + JSON), onde partição e concorrência são nativas. Backends
+key-value (ex.: Redis) atendem ao contrato, mas o autor do provider assume três
+responsabilidades que um document store entrega de graça. A garantia de correção da
+Stoke depende do provider honrar estes pontos (ADR 0007).
+
+| Responsabilidade | O que o provider deve garantir |
+|------------------|--------------------------------|
+| Concorrência otimista (`etag`) | Se o backend não versiona registros nativamente, o provider implementa compare-and-set (ex.: `WATCH`/`MULTI`/`EXEC` ou script Lua no Redis; `If-Match`/`_etag` no Cosmos), guardando a versão junto do registro. `upsert`/`delete` com `expectedEtag` desatualizado devem falhar por `ConcurrencyConflict`. |
+| `queryByPartition` | Se o backend não tem query por partição, o provider mantém um índice consistente por partição (ex.: um `SET` de ids por `partitionKey` no Redis), atualizado transacionalmente em `create`/`delete`. Evitar varreduras globais (ex.: `KEYS`/`SCAN` com padrão). |
+| Durabilidade e expiração | O store é durável, não cache. O provider (e sua configuração) não pode despejar nem expirar registros da Stoke. Em Redis: habilitar persistência (AOF/RDB), `maxmemory-policy: noeviction` e não aplicar TTL a estes registros. |
+
+Segurança (SEC-005, SEC-008, ADR 0007): a Stoke nunca passa segredos/credenciais ao
+provider. A connection string/credencial do backend é construída pela aplicação e o
+cliente é injetado no provider, fora da Stoke. A Stoke valida invariantes básicas dos
+registros retornados (chaves não vazias, `type` na allowlist), mas não sandboxeia o
+provider.
+
 ## Notas idiomáticas
 
 - Python: `Protocol`/ABC; métodos `async` para providers com I/O (FileSystem), sync

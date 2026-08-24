@@ -1,0 +1,79 @@
+{
+  "suite": "session-lifecycle",
+  "domain": "session",
+  "description": "Cross-language contract for the session lifecycle controller (US1, FR-001..FR-005). A create returns a session id and 'active'; successive get calls reflect the official AgentSessionStatus transitions. 'Resumed' is not a status: it is derived (a session previously observed 'idle' now observed 'active' sets resumed_at). An unrecognized/future status maps to 'unknown', never coerced. An invalid idle timeout is rejected; operations on a deleted session raise SessionClosed. The neutral 'get_status_script' lists the raw status the control-plane fake returns for each successive get.",
+  "cases": [
+    {
+      "id": "CC-001-session-happy-path",
+      "conformance": "CC-001",
+      "description": "Create returns a session id and 'active'; state reflects active -> idle -> active, and the idle -> active transition derives a resume marker (resumed_at set).",
+      "agent_definition_id": "agent-a",
+      "get_status_script": ["active", "idle", "active"],
+      "steps": [
+        {"op": "create", "idle_timeout_seconds": 900, "expect": {"state": "active", "has_session_id": true}},
+        {"op": "get", "expect": {"state": "active", "resumed": false}},
+        {"op": "get", "expect": {"state": "idle", "resumed": false}},
+        {"op": "get", "expect": {"state": "active", "resumed": true}}
+      ]
+    },
+    {
+      "id": "CC-008-unknown-status-maps-to-unknown",
+      "conformance": "CC-008",
+      "description": "An unrecognized/future platform status is exposed as 'unknown', never coerced to 'active' or masked.",
+      "agent_definition_id": "agent-a",
+      "get_status_script": ["quiescing"],
+      "steps": [
+        {"op": "create", "idle_timeout_seconds": 900, "expect": {"state": "active", "has_session_id": true}},
+        {"op": "get", "expect": {"state": "unknown"}}
+      ]
+    },
+    {
+      "id": "CC-008-official-taxonomy-case-insensitive",
+      "conformance": "CC-008",
+      "description": "All eight official AgentSessionStatus values translate case-insensitively to the SessionState taxonomy.",
+      "agent_definition_id": "agent-a",
+      "get_status_script": ["CREATING", "Active", "IDLE", "Updating", "FAILED", "Deleting", "deleted", "EXPIRED"],
+      "steps": [
+        {"op": "create", "idle_timeout_seconds": 900, "expect": {"state": "active", "has_session_id": true}},
+        {"op": "get", "expect": {"state": "creating"}},
+        {"op": "get", "expect": {"state": "active"}},
+        {"op": "get", "expect": {"state": "idle"}},
+        {"op": "get", "expect": {"state": "updating"}},
+        {"op": "get", "expect": {"state": "failed"}},
+        {"op": "get", "expect": {"state": "deleting"}},
+        {"op": "get", "expect": {"state": "deleted"}},
+        {"op": "get", "expect": {"state": "expired"}}
+      ]
+    },
+    {
+      "id": "CC-002-invalid-idle-timeout-above-range",
+      "conformance": "CC-002",
+      "description": "An idle timeout above the supported 5-60 minute range is rejected.",
+      "agent_definition_id": "agent-a",
+      "steps": [
+        {"op": "create", "idle_timeout_seconds": 7200, "expect": {"error": "InvalidIdleTimeout"}}
+      ]
+    },
+    {
+      "id": "CC-002-invalid-idle-timeout-below-range",
+      "conformance": "CC-002",
+      "description": "An idle timeout below the supported 5-60 minute range is rejected.",
+      "agent_definition_id": "agent-a",
+      "steps": [
+        {"op": "create", "idle_timeout_seconds": 60, "expect": {"error": "InvalidIdleTimeout"}}
+      ]
+    },
+    {
+      "id": "FR-005-deleted-session-rejects-operations",
+      "conformance": "FR-005",
+      "description": "After a session is deleted, any further operation on it raises SessionClosed deterministically.",
+      "agent_definition_id": "agent-a",
+      "steps": [
+        {"op": "create", "idle_timeout_seconds": 900, "expect": {"state": "active", "has_session_id": true}},
+        {"op": "delete", "expect": {"ok": true}},
+        {"op": "get", "expect": {"error": "SessionClosed"}},
+        {"op": "stop", "expect": {"error": "SessionClosed"}}
+      ]
+    }
+  ]
+}

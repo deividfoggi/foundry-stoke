@@ -53,6 +53,14 @@ Fundamentação nas docs oficiais (ver research.md): idle timeout é medido "ap�
 
 - A tabela de fronteiras Control-plane vs Data-plane está em `docs/features/stoke-beta/plan.md`.
 - A abstração de probe é detalhada no ADR 0003 e no contrato `warmup-probe.md`.
+- **Taxonomia de estado de sessão (confirmada 2026-08-24, spec v1.3)**: o control-plane
+  expõe o status oficial `AgentSessionStatus` do Foundry com oito valores (`creating`,
+  `active`, `idle`, `updating`, `failed`, `deleting`, `deleted`, `expired`). A Stoke modela
+  `SessionState` = esses oito valores mais um `UNKNOWN` de fallback, traduzido
+  case-insensitive; qualquer valor desconhecido ou futuro mapeia para `UNKNOWN`, nunca
+  coagido para outro status. "Resumed" NÃO é um status: é a transição derivada `idle` ->
+  `active` refletida via um marcador `resumed_at`. Fonte:
+  https://learn.microsoft.com/en-us/javascript/api/@azure/ai-projects/agentsessionstatus.
 - **Gap conhecido/assunção**: não está documentado se uma chamada de control-plane (`GET /sessions/{id}`) reseta o idle timer. Assunção de projeto: não reseta; por isso o keepalive usa um probe de data-plane mínimo. Validar empiricamente antes do GA (registrado como NEEDS RESEARCH em research.md).
 
 ## References
