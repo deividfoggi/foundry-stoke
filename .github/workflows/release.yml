@@ -39,14 +39,14 @@ jobs:
         run: cyclonedx-py environment --of json -o sbom.cyclonedx.json
 
       - name: Upload distribution artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-dist
           path: python/dist/*
           if-no-files-found: error
 
       - name: Upload SBOM
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-sbom
           path: python/sbom.cyclonedx.json
