@@ -21,7 +21,9 @@ from typing import Any
 
 from foundry_stoke.errors import AlreadyExists, NotFound, TargetSizeExceeded
 from foundry_stoke.models import (
+    TERMINAL_SESSION_STATES,
     WARM_POOL_REGISTRY_TYPE,
+    SessionState,
     StoreRecord,
     WarmPoolRegistry,
     WarmupStrategyKind,
@@ -105,7 +107,7 @@ class PreProvisionPoolStrategy:
 
     async def reconcile(self) -> WarmupReport:
         etag, registry = await self._load_registry()
-        ready = list(registry.tracked_session_ids)
+        ready, evicted = await self._filter_ready(registry.tracked_session_ids)
         created = 0
         failures = 0
         attempt = 0
@@ -139,6 +141,7 @@ class PreProvisionPoolStrategy:
                 "stoke.warmup.target_size": self._target_size,
                 "stoke.warmup.ready": len(ready),
                 "stoke.warmup.created": created,
+                "stoke.warmup.evicted": evicted,
                 "stoke.warmup.failures": failures,
             },
         )
@@ -148,7 +151,32 @@ class PreProvisionPoolStrategy:
             ready=len(ready),
             created=created,
             failures=failures,
+            evicted=evicted,
         )
+
+    async def _filter_ready(self, session_ids: list[str]) -> tuple[list[str], int]:
+        """Keep only sessions still ready; evict terminal/unknown ones (data-model).
+
+        Terminal states (FAILED, EXPIRED, DELETED, DELETING) and UNKNOWN are
+        never counted toward the target: they are dropped from the pool so the
+        refill loop replaces them. IDLE stays (a reprovision/keepalive candidate).
+        A session that can no longer be queried is treated as not ready.
+        """
+        ready: list[str] = []
+        evicted = 0
+        for session_id in session_ids:
+            try:
+                session = await self._controller.get_session(
+                    self._agent_definition_id, session_id
+                )
+            except Exception:  # noqa: BLE001 - an unqueryable session is not ready
+                evicted += 1
+                continue
+            if session.state in TERMINAL_SESSION_STATES or session.state is SessionState.UNKNOWN:
+                evicted += 1
+                continue
+            ready.append(session_id)
+        return ready, evicted
 
     async def acquire(self) -> str | None:
         """Take a ready session from the pool, persisting the reduced registry."""

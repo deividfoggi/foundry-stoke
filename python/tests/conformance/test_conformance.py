@@ -11,8 +11,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
-import types
 from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import Any
@@ -164,10 +162,15 @@ def _expect_sync(expect: Mapping[str, Any], action: Callable[[], Any]) -> None:
 
 
 class _FakeSessionOperations:
-    """Control-plane fake that returns scripted raw statuses per get call."""
+    """Control-plane fake that returns scripted raw statuses per get call.
 
-    def __init__(self, get_status_script: list[str]) -> None:
+    When ``get_status`` is set, every get returns that fixed status instead of
+    consuming the script (used by the warm-pool eviction scenarios).
+    """
+
+    def __init__(self, get_status_script: list[str], get_status: str | None = None) -> None:
         self._get_statuses = list(get_status_script)
+        self._get_status = get_status
         self._counter = 0
 
     async def create_session(
@@ -179,6 +182,8 @@ class _FakeSessionOperations:
         )
 
     async def get_session(self, agent_definition_id: str, agent_session_id: str) -> RawSession:
+        if self._get_status is not None:
+            return RawSession(agent_session_id=agent_session_id, status=self._get_status)
         status = self._get_statuses.pop(0) if self._get_statuses else "active"
         return RawSession(agent_session_id=agent_session_id, status=status)
 
@@ -225,6 +230,8 @@ async def _handle_session(case: Mapping[str, Any]) -> None:
 def _assert_state(session: Any, expect: Mapping[str, Any]) -> None:
     if "state" in expect:
         assert session.state.value == expect["state"]
+    if "resumed" in expect:
+        assert (session.resumed_at is not None) == expect["resumed"]
 
 
 # --- domain: warmup ----------------------------------------------------------
@@ -344,10 +351,30 @@ async def _warmup_keepalive_user_probe(case: Mapping[str, Any]) -> None:
     assert len(calls) == case["expect"]["probed"]
 
 
+async def _warmup_pool_evicts_terminal(case: Mapping[str, Any]) -> None:
+    expect = case["expect"]
+    store = InMemoryStore()
+    agent = case["agent_definition_id"]
+    controller = SessionController(_FakeSessionOperations([], get_status=case["get_status"]))
+    pool = PreProvisionPoolStrategy(
+        controller=controller,
+        store=store,
+        agent_definition_id=agent,
+        target_size=case["target_size"],
+        clock=VirtualClock(auto_advance=True),
+    )
+    await pool.reconcile()  # seed the pool to target with active sessions
+    report = await pool.reconcile()  # existing sessions now report get_status
+    assert report.evicted == expect["evicted"]
+    assert report.created == expect["created"]
+    assert report.ready == expect["ready"]
+
+
 _WARMUP_SCENARIOS: dict[str, Callable[[Mapping[str, Any]], Awaitable[None]]] = {
     "pool_reconcile_refill": _warmup_pool_reconcile_refill,
     "pool_two_definitions": _warmup_pool_two_definitions,
     "pool_target_ceiling": _warmup_pool_target_ceiling,
+    "pool_evicts_terminal": _warmup_pool_evicts_terminal,
     "keepalive_fires": _warmup_keepalive_fires,
     "keepalive_user_probe": _warmup_keepalive_user_probe,
 }
@@ -361,45 +388,49 @@ class _FakeInjectedCredential:
         return "_FakeInjectedCredential()"
 
 
-class _FakeDefaultAzureCredential:
-    """Stands in for the Entra ID primary path when it is available."""
+class _FakePrimaryCredential:
+    """Stands in for the Entra ID primary path when the factory succeeds."""
+
+
+def _raising_factory() -> Any:
+    """Model the primary path being unavailable (factory raises)."""
+    raise RuntimeError("primary unavailable")
+
+
+def _primary_factory() -> _FakePrimaryCredential:
+    return _FakePrimaryCredential()
 
 
 async def _handle_auth(case: Mapping[str, Any]) -> None:
     assert case["scenario"] == "resolve"
     expect = case["expect"]
     env = case.get("env", {})
-    had = "azure.identity" in sys.modules
-    saved = sys.modules.get("azure.identity")
-    try:
-        _set_primary_availability(available=bool(case.get("primary_available")))
-        injected = _FakeInjectedCredential() if case.get("injected") else None
-        provider = CredentialProvider(credential=injected, environ=env)
 
-        if "error" in expect:
-            with pytest.raises(ERROR_TYPES[expect["error"]]):
-                provider.resolve_credential()
-            return
+    # Map neutral fixture concepts to the credential seam. 'primary_available'
+    # drives the factory (a raising factory models real unavailability, not a
+    # missing package); 'probe_fails' opts into runtime failover via token_probe.
+    factory = _primary_factory if case.get("primary_available") else _raising_factory
+    token_probe: Callable[[Any], None] | None = None
+    if case.get("probe_fails"):
 
-        credential = provider.resolve_credential()
-        _assert_credential_kind(credential, expect["credential_kind"], injected, env)
-    finally:
-        if had:
-            sys.modules["azure.identity"] = saved
-        else:
-            sys.modules.pop("azure.identity", None)
+        def token_probe(credential: Any) -> None:
+            raise RuntimeError("token acquisition failed")
 
+    injected = _FakeInjectedCredential() if case.get("injected") else None
+    provider = CredentialProvider(
+        credential=injected,
+        environ=env,
+        entra_credential_factory=factory,
+        token_probe=token_probe,
+    )
 
-def _set_primary_availability(*, available: bool) -> None:
-    if available:
-        module = types.ModuleType("azure.identity")
-        module.DefaultAzureCredential = _FakeDefaultAzureCredential  # type: ignore[attr-defined]
-        sys.modules.setdefault("azure", types.ModuleType("azure"))
-        sys.modules["azure.identity"] = module
-    else:
-        # A None entry makes ``from azure.identity import ...`` raise ImportError,
-        # modeling the Entra ID primary path being unavailable.
-        sys.modules["azure.identity"] = None  # type: ignore[assignment]
+    if "error" in expect:
+        with pytest.raises(ERROR_TYPES[expect["error"]]):
+            provider.resolve_credential()
+        return
+
+    credential = provider.resolve_credential()
+    _assert_credential_kind(credential, expect["credential_kind"], injected, env)
 
 
 def _assert_credential_kind(
@@ -411,7 +442,7 @@ def _assert_credential_kind(
     if kind == "injected":
         assert credential is injected
     elif kind == "primary":
-        assert isinstance(credential, _FakeDefaultAzureCredential)
+        assert isinstance(credential, _FakePrimaryCredential)
     elif kind == "api_key":
         assert isinstance(credential, ApiKeyCredential)
         _assert_no_secret_leak(credential, env)

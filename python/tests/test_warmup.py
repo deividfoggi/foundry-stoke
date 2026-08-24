@@ -57,6 +57,17 @@ class FailingSessionOperations(FakeSessionOperations):
         raise FoundryUnavailable("control plane unavailable")
 
 
+class GetStatusOperations(FakeSessionOperations):
+    """Create returns active sessions; get reports a fixed status (for eviction)."""
+
+    def __init__(self, get_status: str) -> None:
+        super().__init__()
+        self._get_status = get_status
+
+    async def get_session(self, agent_definition_id: str, agent_session_id: str):
+        return RawSession(agent_session_id=agent_session_id, status=self._get_status)
+
+
 def _pool(controller, store, clock, **kwargs) -> PreProvisionPoolStrategy:
     return PreProvisionPoolStrategy(
         controller=controller,
@@ -101,6 +112,57 @@ async def test_pool_target_size_ceiling_enforced():
     controller = SessionController(FakeSessionOperations())
     with pytest.raises(TargetSizeExceeded):
         _pool(controller, InMemoryStore(), VirtualClock(), target_size=1000, max_target_size=10)
+
+
+@pytest.mark.parametrize("terminal_status", ["failed", "expired", "deleted", "deleting"])
+async def test_pool_evicts_terminal_sessions_and_refills(terminal_status):
+    # Terminal states must be evicted from the warm pool and replaced.
+    store = InMemoryStore()
+    clock = VirtualClock(auto_advance=True)
+    controller = SessionController(GetStatusOperations(terminal_status))
+    pool = _pool(controller, store, clock, target_size=3)
+
+    await pool.reconcile()  # creates sess-1..3 (active)
+    report = await pool.reconcile()  # the 3 existing now report terminal -> evicted
+
+    assert report.evicted == 3
+    assert report.created == 3
+    assert report.ready == 3
+    record = await store.read(pool.registry_id, "agent-a")
+    assert set(record.payload["tracked_session_ids"]) == {"sess-4", "sess-5", "sess-6"}
+
+
+async def test_pool_does_not_count_unknown_as_ready():
+    # UNKNOWN is not treated as ready: the session is not counted and is replaced.
+    store = InMemoryStore()
+    clock = VirtualClock(auto_advance=True)
+    controller = SessionController(GetStatusOperations("quiescing"))
+    pool = _pool(controller, store, clock, target_size=2)
+
+    await pool.reconcile()  # creates sess-1..2
+    report = await pool.reconcile()
+
+    assert report.evicted == 2
+    assert report.ready == 2
+    record = await store.read(pool.registry_id, "agent-a")
+    assert set(record.payload["tracked_session_ids"]) == {"sess-3", "sess-4"}
+
+
+async def test_pool_keeps_idle_sessions_as_reprovision_candidates():
+    # IDLE is a keepalive/reprovision candidate, not terminal: it stays ready.
+    store = InMemoryStore()
+    clock = VirtualClock(auto_advance=True)
+    controller = SessionController(GetStatusOperations("idle"))
+    pool = _pool(controller, store, clock, target_size=3)
+
+    await pool.reconcile()
+    report = await pool.reconcile()
+
+    assert report.evicted == 0
+    assert report.created == 0
+    assert report.ready == 3
+    record = await store.read(pool.registry_id, "agent-a")
+    assert set(record.payload["tracked_session_ids"]) == {"sess-1", "sess-2", "sess-3"}
 
 
 async def test_pool_backoff_and_retry_ceiling_on_failure():

@@ -1,33 +1,16 @@
 {
   "suite": "auth-probe",
   "domain": "auth",
-  "description": "Cross-language contract for credential resolution precedence (US4, FR-019/FR-020, CC-005, ADR 0005). Precedence: injected credential > primary (Entra ID) > API-key / connection-string fallback > NoCredentialAvailable. Modeled at the observable-behavior level with fakes; no live Azure. 'primary_available' models whether the Entra ID primary path can resolve; 'env' supplies fallback configuration.",
+  "description": "Cross-language contract for credential resolution precedence (US4, FR-019/FR-020, CC-005, ADR 0005). Precedence: injected credential > primary (Entra ID) > API-key / connection-string fallback > NoCredentialAvailable. Modeled at the observable-behavior level with fakes; no live Azure. 'primary_available' models whether the Entra ID primary path resolves: the harness maps false to a credential factory that raises (real unavailability, NOT a missing package) and true to a factory that returns the primary. 'probe_fails' opts into runtime failover, mapped to a token_probe that raises so an available primary that cannot acquire a token still falls back. 'env' supplies fallback configuration.",
   "cases": [
     {
-      "id": "CC-005-auth-fallback-to-api-key",
-      "conformance": "CC-005",
-      "description": "The primary path is unavailable and an API key is configured: resolution falls back to the API key and the operation can proceed.",
+      "id": "auth-injected-credential-precedence",
+      "description": "An explicitly injected credential takes precedence over both the primary path and any fallback.",
       "scenario": "resolve",
-      "primary_available": false,
-      "env": {"FOUNDRY_API_KEY": "sk-fallback-secret"},
-      "expect": {"credential_kind": "api_key"}
-    },
-    {
-      "id": "auth-fallback-to-connection-string",
-      "description": "The primary path is unavailable and a connection string is configured: resolution falls back to the connection string.",
-      "scenario": "resolve",
-      "primary_available": false,
-      "env": {"FOUNDRY_CONNECTION_STRING": "Endpoint=https://example;AccountKey=super-secret"},
-      "expect": {"credential_kind": "connection_string"}
-    },
-    {
-      "id": "CC-005-no-credential-available",
-      "conformance": "CC-005",
-      "description": "The primary path is unavailable and no fallback is configured: resolution raises NoCredentialAvailable.",
-      "scenario": "resolve",
-      "primary_available": false,
-      "env": {},
-      "expect": {"error": "NoCredentialAvailable"}
+      "injected": true,
+      "primary_available": true,
+      "env": {"FOUNDRY_API_KEY": "sk-should-not-be-used"},
+      "expect": {"credential_kind": "injected"}
     },
     {
       "id": "auth-primary-precedence-over-fallback",
@@ -38,13 +21,52 @@
       "expect": {"credential_kind": "primary"}
     },
     {
-      "id": "auth-injected-credential-precedence",
-      "description": "An explicitly injected credential takes precedence over both the primary path and any fallback.",
+      "id": "CC-005-auth-fallback-to-api-key",
+      "conformance": "CC-005",
+      "description": "The primary path is unavailable (its factory fails, not merely a missing package) and an API key is configured: resolution falls back to the API key and the operation can proceed.",
       "scenario": "resolve",
-      "injected": true,
+      "primary_available": false,
+      "env": {"FOUNDRY_API_KEY": "sk-fallback-secret"},
+      "expect": {"credential_kind": "api_key"}
+    },
+    {
+      "id": "CC-005-auth-api-key-precedes-connection-string",
+      "conformance": "CC-005",
+      "description": "The primary path is unavailable and both fallbacks are configured: the API key is chosen before the connection string (deterministic fallback order).",
+      "scenario": "resolve",
+      "primary_available": false,
+      "env": {
+        "FOUNDRY_API_KEY": "sk-fallback-secret",
+        "FOUNDRY_CONNECTION_STRING": "Endpoint=https://example;AccountKey=super-secret"
+      },
+      "expect": {"credential_kind": "api_key"}
+    },
+    {
+      "id": "auth-fallback-to-connection-string",
+      "description": "The primary path is unavailable and only a connection string is configured: resolution falls back to the connection string.",
+      "scenario": "resolve",
+      "primary_available": false,
+      "env": {"FOUNDRY_CONNECTION_STRING": "Endpoint=https://example;AccountKey=super-secret"},
+      "expect": {"credential_kind": "connection_string"}
+    },
+    {
+      "id": "CC-005-token-probe-failure-triggers-fallback",
+      "conformance": "CC-005",
+      "description": "The primary path is available but its token probe fails (runtime failover opted in): resolution falls back to the configured API key.",
+      "scenario": "resolve",
       "primary_available": true,
-      "env": {"FOUNDRY_API_KEY": "sk-should-not-be-used"},
-      "expect": {"credential_kind": "injected"}
+      "probe_fails": true,
+      "env": {"FOUNDRY_API_KEY": "sk-fallback-secret"},
+      "expect": {"credential_kind": "api_key"}
+    },
+    {
+      "id": "CC-005-no-credential-available",
+      "conformance": "CC-005",
+      "description": "The primary path is unavailable and no fallback is configured: resolution raises NoCredentialAvailable.",
+      "scenario": "resolve",
+      "primary_available": false,
+      "env": {},
+      "expect": {"error": "NoCredentialAvailable"}
     }
   ]
 }

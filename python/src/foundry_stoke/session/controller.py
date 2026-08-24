@@ -3,12 +3,15 @@
 Encapsulates the Foundry ``/sessions`` control-plane operations behind a
 protocol-agnostic surface (ADR 0002). The confirmed operations (create, get,
 list, stop, delete) are reached through a :class:`SessionOperations` port so the
-real ``azure-ai-projects`` adapter and a test fake are interchangeable
-(research.md: the Python ops are confirmed; the status enum strings are not).
+real ``azure-ai-projects`` adapter and a test fake are interchangeable.
 
-``Resumed`` is not an explicit operation: it is the effect of referencing an idle
-session again. The controller reflects the transition via ``get_session``; it
-never forces it with a dedicated method.
+The status enum is the official ``AgentSessionStatus`` taxonomy (eight lowercase
+values) plus an ``UNKNOWN`` fallback, mapped case-insensitively.
+
+``Resumed`` is not a status nor an explicit operation: it is the effect of
+referencing an idle session again. The controller derives it in ``get_session``
+by remembering the last state it observed per session and setting ``resumed_at``
+when a session previously seen ``idle`` is now observed ``active`` (FR-003).
 """
 
 from __future__ import annotations
@@ -34,9 +37,9 @@ def _utcnow() -> datetime:
 class RawSession:
     """Untranslated session view returned by the control-plane adapter.
 
-    ``status`` is the raw string as returned by the platform; its exact values
-    are not documented (research.md gap) and are mapped to :class:`SessionState`
-    by an injectable translator.
+    ``status`` is the raw string as returned by the platform; it is mapped to
+    :class:`SessionState` by an injectable translator (case-insensitive over the
+    official ``AgentSessionStatus`` taxonomy).
     """
 
     agent_session_id: str
@@ -60,23 +63,18 @@ class SessionOperations(Protocol):
     async def delete_session(self, agent_definition_id: str, agent_session_id: str) -> None: ...
 
 
-# Research gap (research.md): the official status enum strings for
-# Active/Idle/Resumed are not documented. This default translator maps the
-# assumed strings case-insensitively and drops in unchanged once the real values
-# are confirmed. An unrecognized status is treated as Active (conservative) so a
-# naming change does not break the happy path; inject a custom translator to
-# override this behavior.
+# Maps the official ``AgentSessionStatus`` values case-insensitively. Any
+# unrecognized or future value maps to SessionState.UNKNOWN, never coerced to
+# another status (FR-002, CC-008); inject a custom translator to override.
 StatusTranslator = Callable[[str], SessionState]
+
+_OFFICIAL_STATUS_BY_VALUE: dict[str, SessionState] = {
+    state.value: state for state in SessionState if state is not SessionState.UNKNOWN
+}
 
 
 def default_status_translator(status: str) -> SessionState:
-    normalized = status.strip().lower()
-    mapping = {
-        "active": SessionState.ACTIVE,
-        "idle": SessionState.IDLE,
-        "resumed": SessionState.RESUMED,
-    }
-    return mapping.get(normalized, SessionState.ACTIVE)
+    return _OFFICIAL_STATUS_BY_VALUE.get(status.strip().lower(), SessionState.UNKNOWN)
 
 
 class SessionController:
@@ -93,6 +91,9 @@ class SessionController:
         # Sessions deleted in this controller's lifetime; subsequent operations
         # on them return SessionClosed deterministically (FR-005).
         self._closed: set[tuple[str, str]] = set()
+        # Last state observed per session; used to derive the resume marker
+        # (idle -> active) since "resumed" is not a first-class status (FR-003).
+        self._last_state: dict[tuple[str, str], SessionState] = {}
 
     async def create_session(
         self,
@@ -107,10 +108,12 @@ class SessionController:
             )
         raw = await self._ops.create_session(agent_definition_id, idle_timeout_seconds)
         now = _utcnow()
+        state = self._translate(raw.status)
+        self._last_state[(agent_definition_id, raw.agent_session_id)] = state
         return TrackedSession(
             agent_session_id=raw.agent_session_id,
             agent_definition_id=agent_definition_id,
-            state=self._translate(raw.status),
+            state=state,
             idle_timeout_seconds=idle_timeout_seconds,
             last_activity_at=now,
             created_at=now,
@@ -127,13 +130,19 @@ class SessionController:
         raw = await self._ops.get_session(agent_definition_id, agent_session_id)
         state = self._translate(raw.status)
         now = _utcnow()
+        key = (agent_definition_id, agent_session_id)
+        # Derived resume: a session previously seen idle, now active again.
+        resumed = (
+            self._last_state.get(key) is SessionState.IDLE and state is SessionState.ACTIVE
+        )
+        self._last_state[key] = state
         return TrackedSession(
             agent_session_id=raw.agent_session_id,
             agent_definition_id=agent_definition_id,
             state=state,
             idle_timeout_seconds=idle_timeout_seconds,
             last_activity_at=now,
-            resumed_at=now if state is SessionState.RESUMED else None,
+            resumed_at=now if resumed else None,
         )
 
     async def list_sessions(self, agent_definition_id: str) -> list[TrackedSession]:

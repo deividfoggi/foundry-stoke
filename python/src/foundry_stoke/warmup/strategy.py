@@ -25,6 +25,7 @@ class WarmupReport:
     created: int = 0
     probed: int = 0
     failures: int = 0
+    evicted: int = 0
 
 
 @runtime_checkable

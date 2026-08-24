@@ -20,13 +20,38 @@ def _utcnow() -> datetime:
 class SessionState(str, Enum):
     """Compute state of a tracked session, reflected by Stoke.
 
-    The exact status strings returned by the official SDK are not documented
-    (research.md gap); a translator maps raw status to this enum at runtime.
+    The eight official ``AgentSessionStatus`` values (lowercase) plus an
+    ``UNKNOWN`` fallback. A translator maps the raw platform status to this enum
+    case-insensitively at runtime; any unrecognized or future value maps to
+    ``UNKNOWN``, never coerced to another state (FR-002, CC-008). "Resumed" is
+    not a status: it is the derived ``idle`` -> ``active`` transition surfaced
+    via ``TrackedSession.resumed_at`` (FR-003).
+
+    Source: https://learn.microsoft.com/en-us/javascript/api/@azure/ai-projects/agentsessionstatus
     """
 
-    ACTIVE = "Active"
-    IDLE = "Idle"
-    RESUMED = "Resumed"
+    CREATING = "creating"
+    ACTIVE = "active"
+    IDLE = "idle"
+    UPDATING = "updating"
+    FAILED = "failed"
+    DELETING = "deleting"
+    DELETED = "deleted"
+    EXPIRED = "expired"
+    UNKNOWN = "unknown"
+
+
+# Terminal states: a session in one of these is gone for good and MUST be
+# evicted from the warm pool (never counted as ready). UNKNOWN is not terminal
+# but is also not treated as ready by the warm pool (conservative).
+TERMINAL_SESSION_STATES: frozenset[SessionState] = frozenset(
+    {
+        SessionState.FAILED,
+        SessionState.DELETING,
+        SessionState.DELETED,
+        SessionState.EXPIRED,
+    }
+)
 
 
 class SessionOrigin(str, Enum):

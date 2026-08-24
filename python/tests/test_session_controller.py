@@ -11,6 +11,7 @@ from foundry_stoke import (
     SessionController,
     SessionState,
 )
+from foundry_stoke.session.controller import default_status_translator
 
 
 class FakeSessionOperations:
@@ -43,7 +44,8 @@ class FakeSessionOperations:
 
 
 async def test_happy_lifecycle_active_idle_resumed():
-    # CC-001: open a session (Active), observe Idle, reference again (Resumed).
+    # CC-001: open a session (active), observe idle, reference again -> active.
+    # "Resumed" is derived (idle -> active sets resumed_at), not a status.
     ops = FakeSessionOperations()
     controller = SessionController(ops)
 
@@ -52,14 +54,63 @@ async def test_happy_lifecycle_active_idle_resumed():
     assert created.state is SessionState.ACTIVE
     assert created.idle_timeout_seconds == 900
 
+    active = await controller.get_session("agent-a", "sess-1")
+    assert active.state is SessionState.ACTIVE
+    assert active.resumed_at is None
+
     ops.status = "idle"
     idle = await controller.get_session("agent-a", "sess-1")
     assert idle.state is SessionState.IDLE
+    assert idle.resumed_at is None
 
-    ops.status = "resumed"
+    ops.status = "active"
     resumed = await controller.get_session("agent-a", "sess-1")
-    assert resumed.state is SessionState.RESUMED
-    assert resumed.resumed_at is not None
+    assert resumed.state is SessionState.ACTIVE
+    assert resumed.resumed_at is not None  # derived idle -> active
+
+
+async def test_active_after_active_is_not_a_resume():
+    # Only idle -> active derives a resume; active -> active does not.
+    ops = FakeSessionOperations()
+    controller = SessionController(ops)
+    await controller.create_session("agent-a")
+    first = await controller.get_session("agent-a", "sess-1")
+    second = await controller.get_session("agent-a", "sess-1")
+    assert first.resumed_at is None
+    assert second.resumed_at is None
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("creating", SessionState.CREATING),
+        ("ACTIVE", SessionState.ACTIVE),
+        ("Idle", SessionState.IDLE),
+        ("updating", SessionState.UPDATING),
+        ("FAILED", SessionState.FAILED),
+        ("Deleting", SessionState.DELETING),
+        ("deleted", SessionState.DELETED),
+        ("  Expired  ", SessionState.EXPIRED),
+    ],
+)
+def test_default_translator_maps_official_values_case_insensitively(raw, expected):
+    assert default_status_translator(raw) is expected
+
+
+def test_default_translator_maps_unknown_to_unknown():
+    # CC-008: unrecognized/future values are UNKNOWN, never coerced to active.
+    assert default_status_translator("quiescing") is SessionState.UNKNOWN
+    assert default_status_translator("resumed") is SessionState.UNKNOWN
+    assert default_status_translator("") is SessionState.UNKNOWN
+
+
+async def test_get_session_exposes_unknown_status():
+    ops = FakeSessionOperations()
+    ops.status = "quiescing"
+    controller = SessionController(ops)
+    await controller.create_session("agent-a")
+    session = await controller.get_session("agent-a", "sess-1")
+    assert session.state is SessionState.UNKNOWN
 
 
 async def test_invalid_idle_timeout_rejected():

@@ -33,6 +33,33 @@
       ]
     },
     {
+      "id": "warmup-pool-evicts-terminal-sessions",
+      "description": "Sessions in a terminal state (failed, expired, deleted, deleting) are evicted from the warm pool and replaced on the next reconcile; they are never counted toward the target.",
+      "scenario": "pool_evicts_terminal",
+      "agent_definition_id": "agent-a",
+      "target_size": 3,
+      "get_status": "failed",
+      "expect": {"evicted": 3, "created": 3, "ready": 3}
+    },
+    {
+      "id": "warmup-pool-unknown-not-ready",
+      "description": "A session whose status is unrecognized (UNKNOWN) is not treated as ready: it is not counted toward the target and is replaced.",
+      "scenario": "pool_evicts_terminal",
+      "agent_definition_id": "agent-a",
+      "target_size": 2,
+      "get_status": "quiescing",
+      "expect": {"evicted": 2, "created": 2, "ready": 2}
+    },
+    {
+      "id": "warmup-pool-idle-stays-ready",
+      "description": "An idle session is a keepalive/reprovision candidate, not terminal: it stays in the pool and is counted as ready.",
+      "scenario": "pool_evicts_terminal",
+      "agent_definition_id": "agent-a",
+      "target_size": 3,
+      "get_status": "idle",
+      "expect": {"evicted": 0, "created": 0, "ready": 3}
+    },
+    {
       "id": "SEC-007-target-size-ceiling-enforced",
       "conformance": "SEC-007",
       "description": "Constructing a pool with a target above the configured maximum is rejected with TargetSizeExceeded.",
