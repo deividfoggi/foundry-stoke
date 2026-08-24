@@ -1,7 +1,7 @@
 # Modelo de Dados: Stoke Beta
 
 - **Criado em**: 2026-08-21
-- **Spec base**: docs/features/stoke-beta/spec.md (v1.2)
+- **Spec base**: docs/features/stoke-beta/spec.md (v1.3)
 - **ADRs**: 0001 (durable store), 0003 (warm-up), 0006 (redação/telemetria)
 
 Este documento descreve os modelos de dados agnósticos de linguagem que a Stoke persiste
@@ -60,12 +60,43 @@ Estado de uma sessão de agente rastreada pela Stoke (US1, US3). Persistida como
 |-----------------|------|-------------|-----------|
 | `agentSessionId` | string | Sim | Identificador estável da sessão (`agent_session_id`). |
 | `agentDefinitionId` | string | Sim | Definição de agente à qual a sessão pertence. |
-| `state` | enum (`Active`, `Idle`, `Resumed`) | Sim | Estado de compute refletido pela Stoke. Mapeado a partir do status oficial via tradução em runtime (enum próprio; strings oficiais não documentadas — ver research.md). |
+| `state` | enum `SessionState` | Sim | Status de compute refletido pela Stoke. Taxonomia = os 8 valores oficiais de `AgentSessionStatus` mais `UNKNOWN` de fallback (ver "Taxonomia de SessionState" abaixo). Mapeado a partir do `status` oficial via tradução case-insensitive em runtime; valor não reconhecido -> `UNKNOWN`. |
 | `idleTimeoutSeconds` | inteiro (300..3600) | Sim | Idle timeout configurado (5-60 min, padrão 900s). Validado no range; fora dele retorna erro (CC-002). |
 | `lastActivityAt` | timestamp (UTC) | Sim | Momento da última atividade conhecida (requisição/probe) que reseta o idle timer. |
 | `createdAt` | timestamp (UTC) | Sim | Criação da sessão. |
-| `resumedAt` | timestamp (UTC) | Não | Última reativação (Resumed), se houve. |
+| `resumedAt` | timestamp (UTC) | Não | Marcador **derivado**: preenchido quando uma sessão antes `IDLE` é observada `ACTIVE` de novo (efeito de retomada). Não é um status armazenado. |
 | `origin` | enum (`pool`, `on-demand`) | Sim | Se a sessão nasceu do pool pré-provisionado ou sob demanda. |
+
+### Taxonomia de SessionState
+
+`SessionState` é o enum oficial `AgentSessionStatus` do Foundry mais um valor `UNKNOWN` de
+fallback. Os oito valores oficiais são strings minúsculas, mapeadas **case-insensitive** pela
+Stoke:
+
+| Valor oficial | `SessionState` | Semântica |
+|---------------|----------------|----------|
+| `creating` | `CREATING` | Sessão sendo provisionada. |
+| `active` | `ACTIVE` | Compute rodando; pronta para uso. |
+| `idle` | `IDLE` | Sem requisição além do idle timeout; compute desprovisionado, `$HOME`/`/files` persistidos. Candidata a keepalive/reprovisionamento. |
+| `updating` | `UPDATING` | Sessão em atualização. |
+| `failed` | `FAILED` | Terminal. |
+| `deleting` | `DELETING` | Terminal (em remoção). |
+| `deleted` | `DELETED` | Terminal. |
+| `expired` | `EXPIRED` | Terminal. |
+| (qualquer outro/desconhecido) | `UNKNOWN` | Valor não reconhecido ou futuro; nunca coagido para outro status. |
+
+Regras:
+
+- A tradução do `status` oficial é **case-insensitive**; qualquer valor não reconhecido
+  (incluindo strings futuras da plataforma) mapeia para `UNKNOWN`, nunca para `ACTIVE` nem
+  para nenhum outro estado (FR-002, CC-008).
+- **"Resumed" é uma observação derivada, não um status armazenado**: quando uma sessão antes
+  `IDLE` é observada `ACTIVE` de novo, a Stoke preenche `resumedAt`. O status persistido
+  permanece um dos valores oficiais; `resumedAt` é o marcador do efeito de retomada
+  (`idle` -> `active`).
+- **Implicações de warm-up**: `IDLE` é candidata a keepalive/reprovisionamento (renovar via
+  probe ou recriar). `FAILED`, `EXPIRED`, `DELETED` e `DELETING` são **terminais** e MUST ser
+  evictadas do warm pool (nunca tratadas como prontas). `UNKNOWN` não é tratada como pronta.
 
 Invariantes:
 
@@ -95,8 +126,12 @@ erDiagram
 
 ## Gaps conhecidos / assunções
 
-- Strings exatas do enum de status oficial (Active/Idle/Resumed) não documentadas: a Stoke
-  usa enum próprio e traduz em runtime (research.md, ADR 0005).
+- **RESOLVIDO (2026-08-24)**: as strings do enum de status oficial estão confirmadas —
+  `AgentSessionStatus` = `creating`, `active`, `idle`, `updating`, `failed`, `deleting`,
+  `deleted`, `expired`. A Stoke mapeia case-insensitive e usa `UNKNOWN` para valores não
+  reconhecidos. "Resumed" é observação derivada (`resumedAt`), não um status. Fonte:
+  https://learn.microsoft.com/en-us/javascript/api/@azure/ai-projects/agentsessionstatus
+  (ver research.md).
 - Se `GET /sessions/{id}` ou `create_session` resetam o idle timer não está documentado:
   assunção de projeto é que não resetam; `lastActivityAt` é atualizado por atividade de
   probe/requisição (research.md, ADR 0002/0003).

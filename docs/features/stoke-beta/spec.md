@@ -6,7 +6,7 @@
 ## Sumário Executivo
 
 - **Objetivo**: Entregar o Stoke, um SDK multilinguagem (Python e .NET no beta; Go adiado até existir um SDK oficial do Foundry para Go) que controla agentes hospedados no Foundry Agent Service, cobrindo cinco capacidades beta: store durável via provider desacoplado, aquecimento de sessões, controle de sessão/estado, integração com o Foundry no nível de control-plane de sessão (ciclo de vida) com probe de aquecimento plugável, e consistência de API entre linguagens.
-- **Usuário primário**: Desenvolvedores de aplicações que operam agentes hospedados no Foundry e precisam gerenciar o ciclo de vida de sessões (Active/Idle/Resumed) sem escrever integração de baixo nível.
+- **Usuário primário**: Desenvolvedores de aplicações que operam agentes hospedados no Foundry e precisam gerenciar o ciclo de vida de sessões (status oficiais `AgentSessionStatus`, com a retomada de sessões ociosas refletida como observação derivada) sem escrever integração de baixo nível.
 - **Valor entregue**: Reduz a latência percebida de reativação de agentes, padroniza o acesso a store durável sem acoplamento a um banco específico e oferece uma API idiomática e semanticamente equivalente nas linguagens do beta (Python e .NET), com o contrato projetado para admitir Go depois sem quebra.
 - **Escopo**: Incluído: contrato de store durável (compatível com Cosmos por design, sem dependência do SDK do Cosmos), providers de referência InMemory e FileSystem/JSON, estratégias de aquecimento plugáveis, controle de sessão/estado, integração com o Foundry no nível de control-plane de sessão (criar/referenciar/retomar/consultar estado) com probe de aquecimento plugável (ping genérico Responses opcional embutido mais hook de probe fornecido pelo usuário para Invocations/containers customizados), autenticação Entra ID com fallback, observabilidade via OpenTelemetry. A Stoke NÃO embarca cliente de tráfego dual-protocolo; a aplicação usa o SDK oficial do Foundry para o data-plane. Excluído: ver Não-Escopo.
 - **Tipo de mudança**: new surface
@@ -26,7 +26,7 @@
 
 ## Assumptions
 
-- Os SDKs oficiais do Foundry expõem as operações necessárias para gerenciar sessões, protocolos Responses/Invocations e o ciclo Active/Idle/Resumed. O Stoke não inventa APIs; apenas encapsula as oficiais.
+- Os SDKs oficiais do Foundry expõem as operações necessárias para gerenciar sessões, protocolos Responses/Invocations e o status oficial de sessão `AgentSessionStatus`. O Stoke não inventa APIs; apenas encapsula as oficiais.
 - O idle timeout do compute de sessão é configurável entre 5 e 60 minutos, com padrão de 15 minutos, conforme o produto controlado.
 - `$HOME` e `/files` são persistidos pela plataforma entre reativações de sessão; o Stoke não replica essa persistência.
 - Variáveis de ambiente padrão do Foundry (`FOUNDRY_PROJECT_ENDPOINT`, `AZURE_AI_MODEL_DEPLOYMENT_NAME`, `APPLICATIONINSIGHTS_CONNECTION_STRING`) estão disponíveis no ambiente de execução.
@@ -38,17 +38,20 @@
 
 ### User Story 1 - Controlar ciclo de vida de sessão de agente (Priority: P1)
 
-Um desenvolvedor usa o Stoke para abrir uma sessão em um agente hospedado, enviar requisições, observar transições Active/Idle/Resumed e encerrar a sessão de forma idiomática à sua linguagem.
+Um desenvolvedor usa o Stoke para abrir uma sessão em um agente hospedado, enviar requisições, observar as transições de status oficiais (incluindo o efeito de retomada de uma sessão ociosa referenciada de novo) e encerrar a sessão de forma idiomática à sua linguagem.
+
+O modelo de status é o enum oficial `AgentSessionStatus` do Foundry, com oito valores (strings minúsculas): `creating`, `active`, `idle`, `updating`, `failed`, `deleting`, `deleted`, `expired`. O ciclo de vida real é `creating` -> `active` <-> `idle` -> (`updating` | `failed` | `deleting` | `deleted` | `expired`). "Retomada" (resumed) NÃO é um status oficial: é a transição derivada `idle` -> `active` observada quando uma sessão ociosa é referenciada de novo, refletida pela Stoke via um marcador derivado (`resumed_at`), nunca como um status armazenado. Qualquer valor de status desconhecido ou futuro MUST ser exposto como `UNKNOWN`, nunca silenciosamente convertido em outro status.
 
 **Why this priority**: É a capacidade central do SDK. Sem o controle de sessão/estado, nenhuma outra capacidade tem valor.
 
-**Independent Test**: Pode ser testada de ponta a ponta abrindo uma sessão, referenciando-a pela API de ciclo de vida, deixando a sessão entrar em Idle e reativando-a (Resumed), verificando a persistência de `$HOME`/`/files` pela plataforma.
+**Independent Test**: Pode ser testada de ponta a ponta abrindo uma sessão, referenciando-a pela API de ciclo de vida, deixando a sessão entrar em `idle` e referenciando-a de novo (o efeito de retomada, observado como `active` outra vez), verificando a persistência de `$HOME`/`/files` pela plataforma.
 
 **Acceptance Scenarios**:
 
-1. **Given** um agente hospedado configurado, **When** o desenvolvedor abre uma sessão, **Then** o SDK retorna um `agent_session_id` e a sessão está no estado Active.
-2. **Given** uma sessão Active sem atividade além do idle timeout, **When** o timeout é atingido, **Then** o SDK reflete o estado Idle e permite reativação posterior (Resumed) preservando `$HOME`/`/files`.
-3. **Given** uma sessão em qualquer estado, **When** o desenvolvedor encerra a sessão, **Then** os recursos associados são liberados e novas operações sobre a sessão encerrada retornam erro determinístico.
+1. **Given** um agente hospedado configurado, **When** o desenvolvedor abre uma sessão, **Then** o SDK retorna um `agent_session_id` e a sessão evolui para o status `active`.
+2. **Given** uma sessão `active` sem atividade além do idle timeout, **When** o timeout é atingido, **Then** o SDK reflete o status `idle` e, ao referenciar a sessão de novo, ela é observada como `active` outra vez (efeito de retomada, marcado por `resumed_at`) preservando `$HOME`/`/files`.
+3. **Given** uma sessão em qualquer status, **When** o desenvolvedor encerra a sessão, **Then** os recursos associados são liberados e novas operações sobre a sessão encerrada retornam erro determinístico.
+4. **Given** uma sessão cujo status oficial não é reconhecido pela versão corrente da Stoke, **When** o estado é consultado, **Then** o SDK expõe `UNKNOWN` sem coagir para `active` nem mascarar o valor.
 
 ---
 
@@ -137,8 +140,8 @@ Um desenvolvedor que conhece o Stoke em uma linguagem consegue reconhecer e usar
 Controle de sessão/estado:
 
 - **FR-001**: O SDK MUST permitir abrir uma sessão em um agente hospedado e retornar um identificador estável de sessão (`agent_session_id`).
-- **FR-002**: O SDK MUST expor os estados de compute Active, Idle e Resumed e refletir transições entre eles.
-- **FR-003**: O SDK MUST permitir reativar (Resumed) uma sessão em Idle, preservando `$HOME` e `/files` persistidos pela plataforma.
+- **FR-002**: O SDK MUST expor o status de sessão como o enum oficial `AgentSessionStatus` (`creating`, `active`, `idle`, `updating`, `failed`, `deleting`, `deleted`, `expired`) mais um valor `UNKNOWN` de fallback, refletindo as transições entre eles. Valores de status desconhecidos ou futuros MUST ser mapeados para `UNKNOWN`, nunca silenciosamente coagidos para outro status.
+- **FR-003**: O SDK MUST refletir a retomada de uma sessão `idle` (transição derivada `idle` -> `active` ao referenciá-la de novo) via um marcador derivado (`resumed_at`), preservando `$HOME` e `/files` persistidos pela plataforma. "Retomada" não é um status armazenado.
 - **FR-004**: O SDK MUST permitir configurar o idle timeout dentro do intervalo de 5 a 60 minutos, com padrão de 15 minutos.
 - **FR-005**: O SDK MUST permitir encerrar explicitamente uma sessão e retornar erro determinístico em operações subsequentes sobre a sessão encerrada.
 
@@ -179,7 +182,7 @@ Observabilidade:
 
 ### Key Entities *(include if the feature involves data)*
 
-- **Sessão de agente**: representa uma sessão em um agente hospedado; atributos chave incluem `agent_session_id`, estado de compute (Active/Idle/Resumed) e configuração de idle timeout.
+- **Sessão de agente**: representa uma sessão em um agente hospedado; atributos chave incluem `agent_session_id`, status oficial `AgentSessionStatus` (oito valores mais `UNKNOWN` de fallback), o marcador derivado `resumed_at` (transição `idle` -> `active` observada) e configuração de idle timeout.
 - **Registro de store durável**: unidade persistida no store; atributos chave incluem `id` estável, `partition key`, payload JSON e token de concorrência (etag/versão).
 - **Provider de store durável**: implementação da interface de persistência; no beta há InMemory e FileSystem/JSON; providers externos (ex.: Cosmos) implementam a mesma interface.
 - **Estratégia de aquecimento**: implementação da interface comum de warm-up; variantes por pings/resumption agendados e por pool pré-provisionado.
@@ -201,8 +204,9 @@ Observabilidade:
 
 | ID | Cenário | Entrada | Saída Esperada |
 |----|---------|---------|----------------|
-| CC-001 | Ciclo de sessão feliz | Abrir sessão, referenciar/retomar pela API de ciclo de vida, aguardar Idle, reativar | `agent_session_id` retornado; transições Active -> Idle -> Resumed; `$HOME`/`/files` preservados |
+| CC-001 | Ciclo de sessão feliz | Abrir sessão, referenciar pela API de ciclo de vida, aguardar `idle`, referenciar de novo | `agent_session_id` retornado; transições `creating` -> `active` -> `idle` -> `active` (retomada derivada, `resumed_at` marcado); `$HOME`/`/files` preservados |
 | CC-002 | Idle timeout inválido | Configurar idle timeout = 120 min | Erro de validação indicando intervalo suportado 5-60 min |
+| CC-008 | Status desconhecido/futuro | Consultar sessão cujo status oficial não é reconhecido pela versão corrente | Status exposto como `UNKNOWN`; nunca coagido para `active` nem mascarado |
 | CC-003 | Concorrência otimista no store | Duas gravações no mesmo registro com o mesmo etag | Primeira sucede; segunda falha por conflito de concorrência |
 | CC-004 | Core não deve acoplar Cosmos | Inspeção de dependências do core do Stoke | Must NOT conter dependência ou import do SDK do Cosmos |
 | CC-005 | Fallback de autenticação | Entra ID indisponível, API key configurada, operação de ciclo de vida de sessão | Autentica pelo fallback e completa a operação |
@@ -233,6 +237,7 @@ N/A: superfície nova e puramente aditiva (primeiro release beta do Stoke).
 | 1.0 | 2026-08-21 | Rascunho inicial do beta do Stoke (5 capacidades) | new work | deividfoggi |
 | 1.1 | 2026-08-21 | Amendment: integração com o Foundry restrita ao control-plane de sessão (criar/referenciar/retomar/consultar) com probe de aquecimento plugável; remoção do cliente de tráfego dual-protocolo Responses/Invocations do escopo | spec-drift (boundary shift) | deividfoggi |
 | 1.2 | 2026-08-21 | Estreitamento de escopo: linguagens do beta = Python + .NET apenas. Go adiado até existir um SDK oficial do Foundry para Go (a pesquisa confirmou que Go possui somente a REST `/sessions`, sem SDK oficial). O contrato cross-language permanece projetado para admitir Go depois sem quebra. Referências a "três linguagens" em User Stories/FR/SC (US5, FR-021, FR-022, SC-001) devem ser lidas, no beta, como Python + .NET; Go permanece diferido. | scope narrowing (no official Go SDK) | deividfoggi |
+| 1.3 | 2026-08-24 | Reconciliação do modelo de status de sessão com o contrato oficial confirmado. O status de sessão é o enum oficial `AgentSessionStatus` (`creating`, `active`, `idle`, `updating`, `failed`, `deleting`, `deleted`, `expired`) mais um `UNKNOWN` de fallback. "Resumed" deixa de ser tratado como status de primeira classe: é a transição derivada `idle` -> `active` refletida via `resumed_at`. Valores desconhecidos/futuros são expostos como `UNKNOWN`, nunca coagidos. Atualizados US1, FR-002/FR-003, Key Entities, CC-001, e adicionado CC-008. Fonte oficial: https://learn.microsoft.com/en-us/javascript/api/@azure/ai-projects/agentsessionstatus | spec-drift (state-model reconciliation vs official contract) | deividfoggi |
 
 ## Reasoning Log
 
