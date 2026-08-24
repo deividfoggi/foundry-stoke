@@ -132,9 +132,7 @@ class SessionController:
         now = _utcnow()
         key = (agent_definition_id, agent_session_id)
         # Derived resume: a session previously seen idle, now active again.
-        resumed = (
-            self._last_state.get(key) is SessionState.IDLE and state is SessionState.ACTIVE
-        )
+        resumed = self._last_state.get(key) is SessionState.IDLE and state is SessionState.ACTIVE
         self._last_state[key] = state
         return TrackedSession(
             agent_session_id=raw.agent_session_id,

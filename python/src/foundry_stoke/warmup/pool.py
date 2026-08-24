@@ -166,9 +166,7 @@ class PreProvisionPoolStrategy:
         evicted = 0
         for session_id in session_ids:
             try:
-                session = await self._controller.get_session(
-                    self._agent_definition_id, session_id
-                )
+                session = await self._controller.get_session(self._agent_definition_id, session_id)
             except Exception:  # noqa: BLE001 - an unqueryable session is not ready
                 evicted += 1
                 continue

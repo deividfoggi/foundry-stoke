@@ -34,10 +34,10 @@
 - [x] [P] T002 Skeleton do projeto Python: `python/pyproject.toml` (foundry-stoke, Python 3.10+, deps mínimas), pacote `python/foundry_stoke/__init__.py`, config `ruff` + `pytest` + type-checker (`python/pyproject.toml`) (plan.md; coding-guidelines)
 - [ ] [P] T003 Skeleton do projeto .NET: `dotnet/Foundry.Stoke/Foundry.Stoke.csproj` (.NET 8, nullable enable), projeto de testes `dotnet/Foundry.Stoke.Tests/Foundry.Stoke.Tests.csproj`, config `dotnet format` (coding-guidelines)
 - [x] [P] T004 Diretório de fixtures de conformidade compartilhadas: `conformance/fixtures/` (JSON) + `conformance/README.md` descrevendo o formato agnóstico de cenário (ADR 0004, FR-022)
-- [ ] [P] T005 [CI/CD] Pipeline CI Python (build/lint/test): `.github/workflows/python-ci.yml` (ruff check + format + type-check + pytest) (coding-guidelines)
+- [x] [P] T005 [CI/CD] Pipeline CI Python (build/lint/test): `.github/workflows/ci.yml` (ruff check + format + type-check + pytest; matriz 3.10-3.13; core sem azure prova CC-004 + job com extra azure) (coding-guidelines)
 - [ ] [P] T006 [CI/CD] Pipeline CI .NET (build/lint/test): `.github/workflows/dotnet-ci.yml` (dotnet build + format --verify + dotnet test) (coding-guidelines)
-- [ ] [P] T007 [SEC-011] [CI/CD] Postura de supply-chain: lock/pin de dependências (`python/requirements.lock` ou lock do gerenciador; versões fixas no `.csproj`), geração de SBOM, e habilitar Dependabot/scanning (`.github/dependabot.yml`, `.github/workflows/supply-chain.yml`) (plan.md Empacotamento/Release)
-- [ ] [P] T008 [SEC-011] [CI/CD] Pipeline de release Python independente: publicação PyPI via Trusted Publishing/OIDC (provenance) (`.github/workflows/python-release.yml`) (ADR 0004; plan.md)
+- [x] [P] T007 [SEC-011] [CI/CD] Postura de supply-chain (Python): Dependabot (`pip` em `/python` + `github-actions` em `/`), SBOM CycloneDX no build de release; core zero-dep sem lockfile (pin via workflow) (`.github/dependabot.yml`, `.github/workflows/release.yml`) — .NET (`.csproj` pin + signing) pendente (plan.md Empacotamento/Release)
+- [x] [P] T008 [SEC-011] [CI/CD] Pipeline de release Python independente: publicação PyPI via Trusted Publishing/OIDC, tag `python-v*`, gate TestPyPI (dry-run) -> PyPI (environment protegido) (`.github/workflows/release.yml`) (ADR 0004; plan.md)
 - [ ] [P] T009 [SEC-011] [CI/CD] Pipeline de release .NET independente: publicação NuGet com package signing (`.github/workflows/dotnet-release.yml`) (ADR 0004; plan.md)
 
 ---
@@ -145,7 +145,7 @@ Propriedade transversal, validada após as capacidades funcionais. Componente: c
 
 - [x] T068 Harness fino de conformidade (Python): executa as fixtures agnósticas de `conformance/fixtures/` e valida equivalência semântica (`python/tests/conformance/`) (US5, FR-022, SC-001, ADR 0004)
 - [ ] [P] T069 Harness fino de conformidade (.NET): executa as mesmas fixtures (`dotnet/Foundry.Stoke.Tests/Conformance/`, `Category=Conformance`) (US5, FR-022, SC-001, ADR 0004)
-- [ ] T070 [CI/CD] Verificação de equivalência CC-001..CC-007 entre Python e .NET integrada ao CI (gate de release) (`.github/workflows/python-ci.yml`, `.github/workflows/dotnet-ci.yml`) (US5, SC-001, ADR 0004)
+- [ ] T070 [CI/CD] Verificação de equivalência CC-001..CC-007 entre Python e .NET integrada ao CI (gate de release) (`.github/workflows/ci.yml`, `.github/workflows/dotnet-ci.yml`) (US5, SC-001, ADR 0004) — parcial: suíte de conformidade Python roda no CI (`ci.yml`); equivalência com .NET pendente do incremento .NET
 
 ---
 
@@ -154,7 +154,7 @@ Propriedade transversal, validada após as capacidades funcionais. Componente: c
 - [ ] [P] T071 [Monitoring] Dashboards/alertas para métricas `stoke.*` (session, warmup.refill, store) no Application Insights (`docs/features/stoke-beta/observability-runbook.md`) (FR-024, plan.md Observabilidade)
 - [ ] T072 [Runbook] Documentação operacional: rollback, troubleshooting de warm-pool, limitações do advisory file-lock (NFS/SMB), credencial determinística em prod (`docs/features/stoke-beta/observability-runbook.md`) (ADR 0001, 0003, 0005; SEC-004, SEC-006, SEC-007)
 - [ ] [P] T073 README de uso + metadados de empacotamento por linguagem (`python/README.md`, `dotnet/README.md`) (plan.md Empacotamento/Release)
-- [ ] T074 [SEC-011] [CI/CD] Dry-run de release independente (PyPI + NuGet) validando SBOM, assinatura e provenance antes do primeiro publish (`.github/workflows/python-release.yml`, `.github/workflows/dotnet-release.yml`) (ADR 0004; SEC-011)
+- [ ] T074 [SEC-011] [CI/CD] Dry-run de release independente (PyPI + NuGet) validando SBOM, assinatura e provenance antes do primeiro publish (`.github/workflows/release.yml`, `.github/workflows/dotnet-release.yml`) (ADR 0004; SEC-011) — parcial: dry-run Python (TestPyPI + `twine check` + SBOM CycloneDX) implementado em `release.yml`; NuGet pendente
 
 ---
 
@@ -393,3 +393,53 @@ Verificação: `pytest` 98 passed (72 anteriores + 26 de conformidade: 25 casos 
 presença de fixtures); `ruff check`/`ruff format --check` limpos; `mypy --strict` sem erros
 (22 arquivos-fonte; harness em `tests/` fora do escopo de mypy por configuração). Todo o timing
 de warm-up usa `VirtualClock`.
+
+### Incremento 7 — Empacotamento PyPI beta + CI/CD + supply-chain (Python) — 2026-08-24
+
+Escopo: apenas Python packaging + workflows do GitHub Actions. Nenhuma implementação .NET.
+
+Metadados de empacotamento (`python/pyproject.toml`): `version = "0.1.0b1"` (PEP 440
+prerelease); URL de projeto corrigida para `github.com/deividfoggi/foundry-stoke` (Homepage,
+Repository, Issues); `authors = [{ name = "Deivid de Foggi" }]`; classifier `Development Status
+:: 4 - Beta` + Python 3.10-3.13. Core permanece zero-dep; extras `azure`/`dev` intactos.
+LICENSE e NOTICE incluídos no sdist/wheel via `license-files` (symlinks `python/LICENSE` e
+`python/NOTICE` apontando para a raiz, fonte única de verdade).
+
+Desvio necessário (setuptools >= 77 / PEP 639): o classifier `License :: OSI Approved :: Apache
+Software License` foi **removido** e a licença passou a ser expressa como `license =
+"Apache-2.0"` (expressão SPDX) + `license-files`. O setuptools atual trata classifier de licença
+como erro quando há expressão SPDX. Metadata resultante: `License-Expression: Apache-2.0` +
+`License-File: LICENSE`/`NOTICE`. A instrução original pedia manter o classifier; incompatível
+com o backend atual.
+
+CI (`.github/workflows/ci.yml`): triggers push (`main` + `feat/stoke-beta-foundation`) e
+pull_request. Job `core` em matriz 3.10-3.13 instala **apenas** o extra `dev` (core sem azure
+prova CC-004) e roda ruff check + ruff format --check + mypy --strict + pytest (inclui a suíte de
+conformidade). Job `azure-extra` (3.12) instala `dev,azure` e roda a suíte com os adapters reais.
+Fail-fast. Gate CC-001..CC-008.
+
+Release (`.github/workflows/release.yml`): trigger em tags `python-v*` (semver por linguagem;
+não colide com futuras tags .NET). Três jobs encadeados: `build` (python -m build + twine check +
+SBOM CycloneDX via `cyclonedx-py environment`, artefatos `python-dist` e `python-sbom`);
+`publish-testpypi` (environment `testpypi`, OIDC `id-token: write`, dry-run no TestPyPI);
+`publish-pypi` (environment protegido `pypi`, aprovação manual, depende do TestPyPI). Trusted
+Publishing apenas; nenhum token armazenado.
+
+Supply-chain (SEC-011): `.github/dependabot.yml` (`pip` em `/python` + `github-actions` em `/`,
+semanal). SBOM gerado no build de release. Sem lockfile (core zero-dep; pin via workflow).
+Seção "Releasing (Python)" adicionada ao `CONTRIBUTING.md` com o setup manual do Trusted
+Publisher e o procedimento de corte de release.
+
+Reconciliação de formatação: `session/controller.py` e `warmup/pool.py` (código dos incrementos
+5-6) foram reformatados pelo `ruff format` (colapso de linhas < 100 chars, sem mudança de
+comportamento) porque o gate de CI roda `ruff format --check`; drift da versão do ruff.
+
+Tasks: T005 (CI Python) done; T007 (supply-chain Python) done; T008 (release Python) done.
+T070 e T074 parciais (lado Python pronto; equivalência/dry-run .NET pendentes do incremento .NET).
+
+Validação local: `python -m build` gera sdist + wheel; `twine check dist/*` PASSED em ambos;
+sdist inclui LICENSE, NOTICE, README, PKG-INFO; wheel METADATA com `License-Expression`,
+`License-File`, `Requires-Python: >=3.10` e classifiers 3.10-3.13. `cyclonedx-py environment`
+produz SBOM CycloneDX válido (68 componentes no ambiente de teste). `ruff`/`ruff format
+--check`/`mypy --strict` limpos; `pytest` 129 passed. Nenhuma publicação real executada
+(requer o setup manual do Trusted Publisher e uma tag).
