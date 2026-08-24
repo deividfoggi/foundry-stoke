@@ -1,0 +1,70 @@
+{
+  "suite": "warmup",
+  "domain": "warmup",
+  "description": "Cross-language contract for the warm-up strategies (US3, FR-012..FR-015, SEC-007, ADR 0003). Pre-provision pools reconcile to a per-definition target and refill on consumption; the target-size ceiling is enforced; keepalive fires the probe before the idle timeout. All timing uses a deterministic virtual clock: no real sleeps and no live network.",
+  "cases": [
+    {
+      "id": "warmup-pool-reconcile-and-refill",
+      "description": "A pool reconciles to its target, and after one session is consumed a second reconcile refills back to the target.",
+      "scenario": "pool_reconcile_refill",
+      "agent_definition_id": "agent-a",
+      "target_size": 3,
+      "consume": 1,
+      "expect": {
+        "first_created": 3,
+        "first_ready": 3,
+        "after_consume_ready": 2,
+        "refill_created": 1,
+        "refill_ready": 3
+      }
+    },
+    {
+      "id": "CC-006-pool-per-definition-independent",
+      "conformance": "CC-006",
+      "description": "Two agent definitions with distinct target sizes each reconcile to their own target, independently.",
+      "scenario": "pool_two_definitions",
+      "definitions": [
+        {"agent_definition_id": "agent-a", "target_size": 2},
+        {"agent_definition_id": "agent-b", "target_size": 4}
+      ],
+      "expect": [
+        {"ready": 2},
+        {"ready": 4}
+      ]
+    },
+    {
+      "id": "SEC-007-target-size-ceiling-enforced",
+      "conformance": "SEC-007",
+      "description": "Constructing a pool with a target above the configured maximum is rejected with TargetSizeExceeded.",
+      "scenario": "pool_target_ceiling",
+      "agent_definition_id": "agent-a",
+      "target_size": 50,
+      "max_target_size": 10,
+      "expect": {"error": "TargetSizeExceeded"}
+    },
+    {
+      "id": "warmup-keepalive-fires-before-idle-timeout",
+      "description": "Keepalive fires the probe for each session once per interval, well before the idle timeout, driven by the virtual clock.",
+      "scenario": "keepalive_fires",
+      "agent_definition_id": "agent-a",
+      "interval_seconds": 300,
+      "idle_timeout_seconds": 900,
+      "session_ids": ["sess-1", "sess-2"],
+      "advance_intervals": 2,
+      "expect": {
+        "before_first_interval": 0,
+        "probed_per_interval": 2,
+        "total_after_advance": 4
+      }
+    },
+    {
+      "id": "CC-007-keepalive-user-supplied-probe",
+      "conformance": "CC-007",
+      "description": "Keepalive uses exclusively the user-supplied probe for each session; Stoke sends no application traffic of its own.",
+      "scenario": "keepalive_user_probe",
+      "agent_definition_id": "agent-a",
+      "session_ids": ["sess-1"],
+      "expect": {"probed": 1}
+    }
+  ]
+}

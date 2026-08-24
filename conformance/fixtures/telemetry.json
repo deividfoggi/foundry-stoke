@@ -1,0 +1,51 @@
+{
+  "suite": "telemetry",
+  "domain": "telemetry",
+  "description": "Cross-language contract for telemetry redaction (SEC-003/SEC-009, ADR 0006). Only allowlisted attributes are emitted; secret-shaped attributes are dropped; the agent session id is hashed at info level and retained in plaintext only at error level; exception messages are scrubbed of secret-shaped substrings.",
+  "cases": [
+    {
+      "id": "SEC-003-allowlist-only-attributes-emitted",
+      "conformance": "SEC-003",
+      "description": "Given a mixed attribute set, only allowlisted attributes are emitted; secret-shaped attributes are dropped.",
+      "scenario": "redact",
+      "level": "info",
+      "attributes": {
+        "stoke.agent_definition_id": "agent-a",
+        "stoke.warmup.strategy": "keepalive",
+        "connection_string": "Endpoint=https://example;AccountKey=SECRET",
+        "api_key": "sk-secret",
+        "authorization": "Bearer TOKEN"
+      },
+      "expect": {
+        "present": ["stoke.agent_definition_id", "stoke.warmup.strategy"],
+        "absent": ["connection_string", "api_key", "authorization"]
+      }
+    },
+    {
+      "id": "SEC-009-session-id-hashed-at-info-level",
+      "conformance": "SEC-009",
+      "description": "At info level the agent session id is hashed, never emitted in plaintext.",
+      "scenario": "redact",
+      "level": "info",
+      "attributes": {"stoke.agent_session_id": "agent-session-xyz"},
+      "expect": {"session_id": "hashed"}
+    },
+    {
+      "id": "SEC-009-session-id-plaintext-at-error-level",
+      "conformance": "SEC-009",
+      "description": "At error level the agent session id is retained in plaintext for troubleshooting.",
+      "scenario": "redact",
+      "level": "error",
+      "attributes": {"stoke.agent_session_id": "agent-session-xyz"},
+      "expect": {"session_id": "plaintext"}
+    },
+    {
+      "id": "SEC-003-exception-message-sanitized",
+      "conformance": "SEC-003",
+      "description": "Secret-shaped substrings are scrubbed from free-form exception messages before they are attached to spans.",
+      "scenario": "sanitize_message",
+      "message": "connect failed: AccountKey=SUPERSECRET;Endpoint=https://example Bearer abc.def.ghi",
+      "expect": {"absent_substrings": ["SUPERSECRET", "abc.def.ghi"]}
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "suite": "session-lifecycle",
+  "domain": "session",
+  "description": "Cross-language contract for the session lifecycle controller (US1, FR-001..FR-005). A create returns a session id and Active; successive get calls reflect the platform status transitions (Active -> Idle -> Resumed); an invalid idle timeout is rejected; operations on a deleted session raise SessionClosed. The neutral 'get_status_script' lists the raw status the control-plane fake returns for each successive get.",
+  "cases": [
+    {
+      "id": "CC-001-session-happy-path",
+      "conformance": "CC-001",
+      "description": "Create returns a session id and Active; the state reflects Active -> Idle -> Resumed via get.",
+      "agent_definition_id": "agent-a",
+      "get_status_script": ["active", "idle", "resumed"],
+      "steps": [
+        {"op": "create", "idle_timeout_seconds": 900, "expect": {"state": "Active", "has_session_id": true}},
+        {"op": "get", "expect": {"state": "Active"}},
+        {"op": "get", "expect": {"state": "Idle"}},
+        {"op": "get", "expect": {"state": "Resumed"}}
+      ]
+    },
+    {
+      "id": "CC-002-invalid-idle-timeout-above-range",
+      "conformance": "CC-002",
+      "description": "An idle timeout above the supported 5-60 minute range is rejected.",
+      "agent_definition_id": "agent-a",
+      "steps": [
+        {"op": "create", "idle_timeout_seconds": 7200, "expect": {"error": "InvalidIdleTimeout"}}
+      ]
+    },
+    {
+      "id": "CC-002-invalid-idle-timeout-below-range",
+      "conformance": "CC-002",
+      "description": "An idle timeout below the supported 5-60 minute range is rejected.",
+      "agent_definition_id": "agent-a",
+      "steps": [
+        {"op": "create", "idle_timeout_seconds": 60, "expect": {"error": "InvalidIdleTimeout"}}
+      ]
+    },
+    {
+      "id": "FR-005-deleted-session-rejects-operations",
+      "conformance": "FR-005",
+      "description": "After a session is deleted, any further operation on it raises SessionClosed deterministically.",
+      "agent_definition_id": "agent-a",
+      "steps": [
+        {"op": "create", "idle_timeout_seconds": 900, "expect": {"state": "Active", "has_session_id": true}},
+        {"op": "delete", "expect": {"ok": true}},
+        {"op": "get", "expect": {"error": "SessionClosed"}},
+        {"op": "stop", "expect": {"error": "SessionClosed"}}
+      ]
+    }
+  ]
+}

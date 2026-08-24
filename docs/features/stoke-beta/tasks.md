@@ -33,7 +33,7 @@
 - [ ] T001 Scaffolding do monorepo: criar estrutura de pastas `python/`, `dotnet/`, `conformance/` com READMEs (raiz do repo) (plan.md Layout de Módulos)
 - [x] [P] T002 Skeleton do projeto Python: `python/pyproject.toml` (foundry-stoke, Python 3.10+, deps mínimas), pacote `python/foundry_stoke/__init__.py`, config `ruff` + `pytest` + type-checker (`python/pyproject.toml`) (plan.md; coding-guidelines)
 - [ ] [P] T003 Skeleton do projeto .NET: `dotnet/Foundry.Stoke/Foundry.Stoke.csproj` (.NET 8, nullable enable), projeto de testes `dotnet/Foundry.Stoke.Tests/Foundry.Stoke.Tests.csproj`, config `dotnet format` (coding-guidelines)
-- [ ] [P] T004 Diretório de fixtures de conformidade compartilhadas: `conformance/fixtures/` (YAML/JSON) + `conformance/README.md` descrevendo o formato agnóstico de cenário (ADR 0004, FR-022)
+- [x] [P] T004 Diretório de fixtures de conformidade compartilhadas: `conformance/fixtures/` (JSON) + `conformance/README.md` descrevendo o formato agnóstico de cenário (ADR 0004, FR-022)
 - [ ] [P] T005 [CI/CD] Pipeline CI Python (build/lint/test): `.github/workflows/python-ci.yml` (ruff check + format + type-check + pytest) (coding-guidelines)
 - [ ] [P] T006 [CI/CD] Pipeline CI .NET (build/lint/test): `.github/workflows/dotnet-ci.yml` (dotnet build + format --verify + dotnet test) (coding-guidelines)
 - [ ] [P] T007 [SEC-011] [CI/CD] Postura de supply-chain: lock/pin de dependências (`python/requirements.lock` ou lock do gerenciador; versões fixas no `.csproj`), geração de SBOM, e habilitar Dependabot/scanning (`.github/dependabot.yml`, `.github/workflows/supply-chain.yml`) (plan.md Empacotamento/Release)
@@ -63,7 +63,7 @@ usadas por múltiplas User Stories.
 Depende de: T010-T017 (foundational) e da `CredentialProvider` primária (T052/T058 em US4;
 usar `DefaultAzureCredential` primário). Componente: session lifecycle / `SessionController`.
 
-- [ ] T018 Fixtures de conformidade do ciclo de sessão: `conformance/fixtures/session-lifecycle.yaml` cobrindo CC-001 (ciclo feliz) e CC-002 (idle timeout inválido) (FR-001..FR-005, ADR 0004)
+- [x] T018 Fixtures de conformidade do ciclo de sessão: `conformance/fixtures/session-lifecycle.json` cobrindo CC-001 (ciclo feliz) e CC-002 (idle timeout inválido) (FR-001..FR-005, ADR 0004)
 - [x] T019 **Tracer bullet** `SessionController` (Python): abrir sessão + consultar estado + tradução do enum de status para `Active/Idle/Resumed` via `azure-ai-projects` (`python/foundry_stoke/session/controller.py`) (US1, FR-001, FR-002, ADR 0002, ADR 0005)
 - [x] T020 Validação de idle timeout 5-60 min (padrão 900s) com erro tipado fora do range (Python) (`python/foundry_stoke/session/controller.py`) (US1, FR-004, CC-002)
 - [x] T021 Stop/Delete de sessão + erro determinístico em operações sobre sessão encerrada (Python) (`python/foundry_stoke/session/controller.py`) (US1, FR-003, FR-005, invariante)
@@ -78,7 +78,7 @@ usar `DefaultAzureCredential` primário). Componente: session lifecycle / `Sessi
 
 Independente de US1 (pode iniciar em paralelo). Componente: durable store.
 
-- [ ] T026 Fixtures de conformidade do store: `conformance/fixtures/durable-store.yaml` cobrindo CC-003 (concorrência otimista) e CC-004 (core sem Cosmos) (FR-006..FR-011, ADR 0001)
+- [x] T026 Fixtures de conformidade do store: `conformance/fixtures/durable-store.json` cobrindo CC-003 (concorrência otimista) e CC-004 (core sem Cosmos) (FR-006..FR-011, ADR 0001)
 - [x] T027 Interface `DurableStoreProvider` (Protocol/ABC) + modelo `StoreRecord` (id, partitionKey, etag/version, type, payload JSON, timestamps) (Python) (`python/foundry_stoke/store/provider.py`) (US2, FR-006, FR-007, FR-008, ADR 0001, data-model.md)
 - [x] T028 **Tracer bullet** `InMemoryStore` (Python): CRUD + query-por-partição + concorrência otimista por etag (`python/foundry_stoke/store/in_memory.py`) (US2, FR-010, CC-003)
 - [x] T029 `FileSystemStore` (Python): CRUD + serialização JSON + concorrência otimista, persistência entre reinícios (`python/foundry_stoke/store/file_system.py`) (US2, FR-010)
@@ -101,7 +101,7 @@ Independente de US1 (pode iniciar em paralelo). Componente: durable store.
 Depende de: US2 (registry no store), `SessionController` (US1/US4) e Clock/Scheduler (T014/T015).
 Componente: warm-up.
 
-- [ ] T041 Fixtures de conformidade de warm-up: `conformance/fixtures/warmup.yaml` cobrindo CC-006 (pool por definição de agente) e keepalive dentro da janela de idle (FR-012..FR-015, ADR 0003)
+- [x] T041 Fixtures de conformidade de warm-up: `conformance/fixtures/warmup.json` cobrindo CC-006 (pool por definição de agente) e keepalive dentro da janela de idle (FR-012..FR-015, ADR 0003)
 - [x] T042 Interface `WarmupStrategy` selecionável pelo usuário (Python) (`python/foundry_stoke/warmup/strategy.py`) (US3, FR-012, ADR 0003)
 - [x] T043 **Tracer bullet** `KeepaliveStrategy` (Python): executa `WarmupProbe` dentro da janela de idle via clock injetado, renovando a sessão sob `VirtualClock` (`python/foundry_stoke/warmup/keepalive.py`) (US3, FR-013, ADR 0003)
 - [x] T044 `PreProvisionPoolStrategy` (Python): pool de N sessões quentes por definição de agente, reabastecimento até `targetSize`, persistência do `WarmPoolRegistry` no store (`python/foundry_stoke/warmup/pool.py`) (US3, FR-014, FR-015, CC-006, data-model.md)
@@ -119,7 +119,7 @@ Componente: warm-up.
 Depende de: US1 (`SessionController`). Componente: auth (`CredentialProvider`), probe
 (`WarmupProbe`), telemetria de segredos.
 
-- [ ] T051 Fixtures de conformidade de auth + probe: `conformance/fixtures/auth-probe.yaml` cobrindo CC-005 (fallback de auth) e CC-007 (keepalive por probe do usuário) (FR-016..FR-020, ADR 0005, 0007)
+- [x] T051 Fixtures de conformidade de auth + probe: `conformance/fixtures/auth-probe.json` cobrindo CC-005 (fallback de auth) e CC-007 (keepalive por probe do usuário) (FR-016..FR-020, ADR 0005, 0007)
 - [x] T052 **Tracer bullet** `CredentialProvider` (Python): `DefaultAzureCredential` primário + precedência de fallback por API key/connection string quando o primário indisponível; erro claro sem credencial (`python/foundry_stoke/auth/credential_provider.py`) (US4, FR-019, FR-020, CC-005, ADR 0005)
 - [x] T053 [SEC-004] Credencial determinística em produção (Python): suporte a `AZURE_TOKEN_CREDENTIALS=prod` e injeção de `TokenCredential` explícito + documentação (`python/foundry_stoke/auth/credential_provider.py`) (ADR 0005, SEC-004)
 - [x] T054 [SEC-005] Segredos nunca persistidos no store + precedência de fallback + tempo de vida em memória minimizado + sem exposição em `repr`/`str` (Python) (`python/foundry_stoke/auth/credential_provider.py`) (ADR 0005, ADR 0006, SEC-005)
@@ -143,7 +143,7 @@ Depende de: US1 (`SessionController`). Componente: auth (`CredentialProvider`), 
 
 Propriedade transversal, validada após as capacidades funcionais. Componente: conformance suite.
 
-- [ ] T068 Harness fino de conformidade (Python): executa as fixtures agnósticas de `conformance/fixtures/` e valida equivalência semântica (`python/tests/conformance/`) (US5, FR-022, SC-001, ADR 0004)
+- [x] T068 Harness fino de conformidade (Python): executa as fixtures agnósticas de `conformance/fixtures/` e valida equivalência semântica (`python/tests/conformance/`) (US5, FR-022, SC-001, ADR 0004)
 - [ ] [P] T069 Harness fino de conformidade (.NET): executa as mesmas fixtures (`dotnet/Foundry.Stoke.Tests/Conformance/`, `Category=Conformance`) (US5, FR-022, SC-001, ADR 0004)
 - [ ] T070 [CI/CD] Verificação de equivalência CC-001..CC-007 entre Python e .NET integrada ao CI (gate de release) (`.github/workflows/python-ci.yml`, `.github/workflows/dotnet-ci.yml`) (US5, SC-001, ADR 0004)
 
@@ -199,13 +199,13 @@ Todas as 11 mitigações têm task(s) explícita(s) referenciando o SEC-00x e o 
 
 | CC | Cenário | Fixture |
 |----|---------|---------|
-| CC-001 | Ciclo de sessão feliz | session-lifecycle.yaml (T018) |
-| CC-002 | Idle timeout inválido | session-lifecycle.yaml (T018) |
-| CC-003 | Concorrência otimista no store | durable-store.yaml (T026) |
-| CC-004 | Core sem Cosmos | durable-store.yaml (T026) + T039 |
-| CC-005 | Fallback de autenticação | auth-probe.yaml (T051) |
-| CC-006 | Pool por definição de agente | warmup.yaml (T041) |
-| CC-007 | Keepalive por probe do usuário | auth-probe.yaml (T051) |
+| CC-001 | Ciclo de sessão feliz | session-lifecycle.json (T018) |
+| CC-002 | Idle timeout inválido | session-lifecycle.json (T018) |
+| CC-003 | Concorrência otimista no store | durable-store.json (T026) |
+| CC-004 | Core sem Cosmos | durable-store.json (T026) + T039 |
+| CC-005 | Fallback de autenticação | auth-probe.json (T051) |
+| CC-006 | Pool por definição de agente | warmup.json (T041) |
+| CC-007 | Keepalive por probe do usuário | warmup.json (T041) |
 
 ---
 
@@ -341,3 +341,55 @@ Restante Python (fora dos incrementos 1-2): T068 (harness de conformidade), T025
 Verificação: `pytest` 72 passed; `ruff check`/`ruff format --check` limpos; `mypy --strict` sem
 erros (22 arquivos-fonte). Todos os testes de timing de warm-up usam `VirtualClock` (sem sleep
 real).
+
+### Incremento 3 — Suíte de conformidade cross-language (US5) — 2026-08-24
+
+Escopo: fixtures agnósticas de linguagem (fonte única de verdade) + harness fino Python. Sem
+.NET (o harness .NET acompanha o incremento .NET, consumindo estas mesmas fixtures). Nenhuma
+alteração na implementação Python existente: o harness apenas a exercita.
+
+Decisão de formato: fixtures em **JSON** (não YAML) para parse sem dependência extra em ambas
+as linguagens (Python `json`, .NET `System.Text.Json`), mantendo os harnesses dependency-free.
+ADR 0004 admite YAML/JSON; JSON escolhido pela neutralidade de parser. `tasks.md` atualizado de
+`.yaml` para `.json` nas fixtures.
+
+Concluídas: T004 (diretório `conformance/fixtures/` + `conformance/README.md` com o schema
+agnóstico e o guia de plug-in de novo harness), T018 (fixtures de sessão), T026 (fixtures de
+store), T041 (fixtures de warm-up), T051 (fixtures de auth+probe), T068 (harness Python em
+`python/tests/conformance/test_conformance.py`).
+
+Fixtures (25 casos em 5 arquivos), cobrindo o contrato semântico cross-language:
+
+- `durable-store.json` (7): create+read round-trip; AlreadyExists em duplicado; NotFound em
+  ausente; CC-003 concorrência otimista por etag; query-por-partição com e sem filtro de tipo;
+  SEC-008 rejeição de chave vazia e de tipo fora da allowlist.
+- `session-lifecycle.json` (4): CC-001 ciclo feliz com id + Active -> Idle -> Resumed via get;
+  CC-002 idle timeout inválido (acima e abaixo do range 5-60 min); FR-005 SessionClosed em
+  operações sobre sessão deletada.
+- `warmup.json` (5): pool reconcilia ao alvo e reabastece após consumo; CC-006 duas definições
+  com alvos independentes; SEC-007 teto de targetSize; keepalive dispara o probe antes do idle
+  timeout (VirtualClock, advance por intervalo); CC-007 keepalive por probe do usuário.
+- `auth-probe.json` (5): CC-005 fallback para API key e para connection string; CC-005
+  NoCredentialAvailable sem credencial; precedência do primário sobre fallback; precedência de
+  credencial injetada. Verifica que nenhum segredo do `env` vaza no `repr`/`str`.
+- `telemetry.json` (4): SEC-003 apenas atributos da allowlist emitidos; SEC-009 `agent_session_id`
+  hasheado em info e íntegro em erro; SEC-003 sanitização de mensagem de exceção.
+
+Schema das fixtures: cada arquivo é um suite (`suite`, `domain`, `description`, `cases`); cada
+caso tem `id` único, `description`, `conformance` opcional (CC-00x/SEC-00x) e campos específicos
+do domínio. Identificadores de erro neutros (`ConcurrencyConflict`, `SessionClosed`,
+`NoCredentialAvailable`, ...) mapeados para os tipos concretos de `foundry_stoke` pelo harness.
+O harness é fino: um despachante por `domain` traduz conceitos neutros para a superfície Python
+(InMemoryStore, VirtualClock, fakes/seams); nenhuma rede/Azure real, nenhum sleep real.
+
+Como o harness .NET pluga: lê os mesmos `conformance/fixtures/*.json`, despacha por `domain`,
+mapeia conceitos neutros para a superfície .NET e os identificadores de erro para os tipos .NET
+(ver `conformance/README.md`, seção "Adding a new language harness").
+
+Pendências de US5: T069 (harness .NET) e T070 (gate de equivalência CC-001..CC-007 no CI) —
+ambos acompanham o incremento .NET.
+
+Verificação: `pytest` 98 passed (72 anteriores + 26 de conformidade: 25 casos + guarda de
+presença de fixtures); `ruff check`/`ruff format --check` limpos; `mypy --strict` sem erros
+(22 arquivos-fonte; harness em `tests/` fora do escopo de mypy por configuração). Todo o timing
+de warm-up usa `VirtualClock`.

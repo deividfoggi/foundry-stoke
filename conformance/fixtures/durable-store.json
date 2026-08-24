@@ -1,0 +1,131 @@
+{
+  "suite": "durable-store",
+  "domain": "store",
+  "description": "Cross-language contract for the durable store provider (ADR 0001). Optimistic concurrency by etag, query-by-partition, and record-invariant validation (SEC-008). Steps run against any DurableStoreProvider; the reference harness uses the in-memory provider.",
+  "cases": [
+    {
+      "id": "store-create-read-roundtrip",
+      "description": "A created record can be read back by its composite key with the same payload.",
+      "steps": [
+        {
+          "op": "create",
+          "record": {"id": "s1", "partition_key": "agent-a", "type": "tracked-session", "payload": {"state": "Active"}},
+          "bind": "r1",
+          "expect": {"ok": true, "etag_present": true}
+        },
+        {
+          "op": "read",
+          "id": "s1",
+          "partition_key": "agent-a",
+          "expect": {"payload": {"state": "Active"}}
+        }
+      ]
+    },
+    {
+      "id": "store-create-duplicate-already-exists",
+      "description": "Creating a second record with the same composite key raises AlreadyExists.",
+      "steps": [
+        {
+          "op": "create",
+          "record": {"id": "s1", "partition_key": "agent-a", "type": "tracked-session", "payload": {}},
+          "expect": {"ok": true}
+        },
+        {
+          "op": "create",
+          "record": {"id": "s1", "partition_key": "agent-a", "type": "tracked-session", "payload": {}},
+          "expect": {"error": "AlreadyExists"}
+        }
+      ]
+    },
+    {
+      "id": "store-read-missing-not-found",
+      "description": "Reading an absent record raises NotFound.",
+      "steps": [
+        {
+          "op": "read",
+          "id": "missing",
+          "partition_key": "agent-a",
+          "expect": {"error": "NotFound"}
+        }
+      ]
+    },
+    {
+      "id": "CC-003-optimistic-concurrency-conflict",
+      "conformance": "CC-003",
+      "description": "Two writes against the same record with the same (now stale) etag: the first succeeds, the second fails with ConcurrencyConflict.",
+      "steps": [
+        {
+          "op": "create",
+          "record": {"id": "s1", "partition_key": "agent-a", "type": "tracked-session", "payload": {"n": 0}},
+          "bind": "created",
+          "expect": {"ok": true}
+        },
+        {
+          "op": "upsert",
+          "record": {"id": "s1", "partition_key": "agent-a", "type": "tracked-session", "payload": {"n": 1}},
+          "expected_etag_from": "created",
+          "bind": "updated",
+          "expect": {"ok": true}
+        },
+        {
+          "op": "upsert",
+          "record": {"id": "s1", "partition_key": "agent-a", "type": "tracked-session", "payload": {"n": 2}},
+          "expected_etag_from": "created",
+          "expect": {"error": "ConcurrencyConflict"}
+        }
+      ]
+    },
+    {
+      "id": "store-query-by-partition",
+      "description": "Query lists every record in a partition, and narrows to a single type when a type filter is supplied.",
+      "steps": [
+        {
+          "op": "create",
+          "record": {"id": "s1", "partition_key": "agent-a", "type": "tracked-session", "payload": {}},
+          "expect": {"ok": true}
+        },
+        {
+          "op": "create",
+          "record": {"id": "reg", "partition_key": "agent-a", "type": "warm-pool-registry", "payload": {}},
+          "expect": {"ok": true}
+        },
+        {
+          "op": "query",
+          "partition_key": "agent-a",
+          "type_filter": null,
+          "expect": {"count": 2}
+        },
+        {
+          "op": "query",
+          "partition_key": "agent-a",
+          "type_filter": "tracked-session",
+          "expect": {"count": 1}
+        }
+      ]
+    },
+    {
+      "id": "SEC-008-reject-empty-key",
+      "conformance": "SEC-008",
+      "description": "A record returned by a provider with an empty id or partition_key is rejected by invariant validation.",
+      "steps": [
+        {
+          "op": "validate_record",
+          "record": {"id": "", "partition_key": "agent-a", "type": "tracked-session", "payload": {}},
+          "expect": {"error": "InvalidRecordKey"}
+        }
+      ]
+    },
+    {
+      "id": "SEC-008-reject-unknown-type",
+      "conformance": "SEC-008",
+      "description": "A record returned by a provider with a type outside the allowlist is rejected by invariant validation.",
+      "steps": [
+        {
+          "op": "validate_record",
+          "record": {"id": "s1", "partition_key": "agent-a", "type": "bogus-type", "payload": {}},
+          "expect": {"error": "UnknownRecordType"}
+        }
+      ]
+    }
+  ]
+}
