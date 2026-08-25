@@ -50,12 +50,14 @@ TokenProbe = Callable[[Any], None]
 
 
 def _default_entra_credential_factory() -> Any:
-    """Construct ``DefaultAzureCredential`` lazily (Entra ID primary path).
+    """Construct an async ``DefaultAzureCredential`` lazily (Entra ID primary path).
 
-    Raising (``ImportError`` when ``azure-identity`` is absent, or any
-    construction failure) signals that the primary path is unavailable.
+    The async credential matches the ``azure.ai.projects.aio.AIProjectClient``
+    the facade builds (its token acquisition is awaited). Raising (``ImportError``
+    when ``azure-identity`` is absent, or any construction failure) signals that
+    the primary path is unavailable.
     """
-    from azure.identity import DefaultAzureCredential
+    from azure.identity.aio import DefaultAzureCredential
 
     return DefaultAzureCredential()
 

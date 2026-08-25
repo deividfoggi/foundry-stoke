@@ -32,6 +32,9 @@ dependencies = []
 azure = [
     "azure-ai-projects>=2.3.0",
     "azure-identity>=1.15.0",
+    # Async transport required by the aio AIProjectClient/DefaultAzureCredential
+    # default pipeline; not pulled transitively by azure-ai-projects.
+    "aiohttp>=3.9",
 ]
 dev = [
     "pytest>=8.0",
