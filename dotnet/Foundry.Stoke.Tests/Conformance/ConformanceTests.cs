@@ -29,6 +29,11 @@ public sealed class StoreConformanceTests
         ["UnknownRecordType"] = typeof(UnknownRecordTypeException),
     };
 
+    // Provider kinds the store domain runs against. Every fixture case must pass
+    // identically for both the in-memory and the on-disk provider (FR-009).
+    private const string InMemoryKind = "in-memory";
+    private const string FileSystemKind = "file-system";
+
     public static IEnumerable<object[]> StoreCases()
     {
         foreach (var file in Directory.EnumerateFiles(FixturesDir, "*.json").OrderBy(path => path, StringComparer.Ordinal))
@@ -47,28 +52,49 @@ public sealed class StoreConformanceTests
 
                 // Pass the case as a JSON string: xUnit theory data must be
                 // serializable for stable test discovery. Re-parsed in the test.
-                yield return new object[] { suiteName, caseId, caseObj.ToJsonString() };
+                var caseJson = caseObj.ToJsonString();
+                yield return new object[] { suiteName, caseId, InMemoryKind, caseJson };
+                yield return new object[] { suiteName, caseId, FileSystemKind, caseJson };
             }
         }
     }
 
     [Theory]
     [MemberData(nameof(StoreCases))]
-    public async Task StoreDomain(string suite, string caseId, string caseJson)
+    public async Task StoreDomain(string suite, string caseId, string providerKind, string caseJson)
     {
         _ = suite;
         _ = caseId;
         var caseObj = JsonNode.Parse(caseJson)!.AsObject();
-        var store = new InMemoryStore();
         var etags = new Dictionary<string, string>();
 
-        foreach (var stepNode in caseObj["steps"]!.AsArray())
+        var tempDir = providerKind == FileSystemKind
+            ? Directory.CreateTempSubdirectory("stoke-conformance-").FullName
+            : null;
+        IDurableStoreProvider store = providerKind switch
         {
-            await ExecuteStep(store, stepNode!.AsObject(), etags);
+            InMemoryKind => new InMemoryStore(),
+            FileSystemKind => new FileSystemStore(tempDir!),
+            _ => throw new ArgumentException($"unknown provider kind '{providerKind}'"),
+        };
+
+        try
+        {
+            foreach (var stepNode in caseObj["steps"]!.AsArray())
+            {
+                await ExecuteStep(store, stepNode!.AsObject(), etags);
+            }
+        }
+        finally
+        {
+            if (tempDir is not null)
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
         }
     }
 
-    private static async Task ExecuteStep(InMemoryStore store, JsonObject step, Dictionary<string, string> etags)
+    private static async Task ExecuteStep(IDurableStoreProvider store, JsonObject step, Dictionary<string, string> etags)
     {
         var op = (string)step["op"]!;
         var expect = step["expect"]?.AsObject() ?? new JsonObject();
