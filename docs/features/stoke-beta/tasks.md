@@ -35,7 +35,7 @@
 - [x] [P] T003 Skeleton do projeto .NET: `dotnet/Foundry.Stoke/Foundry.Stoke.csproj` (.NET 8, nullable enable), projeto de testes `dotnet/Foundry.Stoke.Tests/Foundry.Stoke.Tests.csproj`, config `dotnet format` (coding-guidelines)
 - [x] [P] T004 Diretório de fixtures de conformidade compartilhadas: `conformance/fixtures/` (JSON) + `conformance/README.md` descrevendo o formato agnóstico de cenário (ADR 0004, FR-022)
 - [x] [P] T005 [CI/CD] Pipeline CI Python (build/lint/test): `.github/workflows/ci.yml` (ruff check + format + type-check + pytest; matriz 3.10-3.13; core sem azure prova CC-004 + job com extra azure) (coding-guidelines)
-- [ ] [P] T006 [CI/CD] Pipeline CI .NET (build/lint/test): `.github/workflows/dotnet-ci.yml` (dotnet build + format --verify + dotnet test) (coding-guidelines)
+- [x] [P] T006 [CI/CD] Pipeline CI .NET (build/lint/test): `.github/workflows/dotnet-ci.yml` (dotnet build + format --verify + dotnet test) (coding-guidelines)
 - [x] [P] T007 [SEC-011] [CI/CD] Postura de supply-chain (Python): Dependabot (`pip` em `/python` + `github-actions` em `/`), SBOM CycloneDX no build de release; core zero-dep sem lockfile (pin via workflow) (`.github/dependabot.yml`, `.github/workflows/release.yml`) — .NET (`.csproj` pin + signing) pendente (plan.md Empacotamento/Release)
 - [x] [P] T008 [SEC-011] [CI/CD] Pipeline de release Python independente: publicação PyPI via Trusted Publishing/OIDC, tag `python-v*`, gate TestPyPI (dry-run) -> PyPI (environment protegido) (`.github/workflows/release.yml`) (ADR 0004; plan.md)
 - [ ] [P] T009 [SEC-011] [CI/CD] Pipeline de release .NET independente: publicação NuGet com package signing (`.github/workflows/dotnet-release.yml`) (ADR 0004; plan.md)
@@ -145,7 +145,7 @@ Propriedade transversal, validada após as capacidades funcionais. Componente: c
 
 - [x] T068 Harness fino de conformidade (Python): executa as fixtures agnósticas de `conformance/fixtures/` e valida equivalência semântica (`python/tests/conformance/`) (US5, FR-022, SC-001, ADR 0004)
 - [ ] [P] T069 Harness fino de conformidade (.NET): executa as mesmas fixtures (`dotnet/Foundry.Stoke.Tests/Conformance/`, `Category=Conformance`) (US5, FR-022, SC-001, ADR 0004) — parcial: harness lê `conformance/fixtures/*.json` e executa o domínio `store` (7 casos verdes); demais domínios (session/warmup/auth/telemetry) despachados nas próximas fatias
-- [ ] T070 [CI/CD] Verificação de equivalência CC-001..CC-007 entre Python e .NET integrada ao CI (gate de release) (`.github/workflows/ci.yml`, `.github/workflows/dotnet-ci.yml`) (US5, SC-001, ADR 0004) — parcial: suíte de conformidade Python roda no CI (`ci.yml`); equivalência com .NET pendente do incremento .NET
+- [ ] T070 [CI/CD] Verificação de equivalência CC-001..CC-007 entre Python e .NET integrada ao CI (gate de release) (`.github/workflows/ci.yml`, `.github/workflows/dotnet-ci.yml`) (US5, SC-001, ADR 0004) — parcial: gate `equivalence` no `dotnet-ci.yml` roda AS DUAS suítes de conformidade (Python + .NET) e só passa se ambas passarem; cobre a interseção de domínios implementados (hoje: store) e alarga quando as próximas fatias .NET acenderem session/warmup/auth/telemetry. Falta tornar o check obrigatório via branch protection e o gate de release NuGet (T009)
 
 ---
 
