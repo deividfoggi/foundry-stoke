@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "foundry-stoke"
-version = "0.1.0b1"
+version = "0.1.0b2"
 description = "Control-plane library for Foundry hosted agent instances (durable store, session lifecycle, auth)."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,6 +32,9 @@ dependencies = []
 azure = [
     "azure-ai-projects>=2.3.0",
     "azure-identity>=1.15.0",
+    # Async transport required by the aio AIProjectClient/DefaultAzureCredential
+    # default pipeline; not pulled transitively by azure-ai-projects.
+    "aiohttp>=3.9",
 ]
 dev = [
     "pytest>=8.0",

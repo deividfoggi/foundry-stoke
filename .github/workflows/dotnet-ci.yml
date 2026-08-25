@@ -1,0 +1,84 @@
+name: .NET CI
+
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dotnet-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: dotnet
+
+jobs:
+  # Build, format and test the .NET solution. The library targets net8.0 (reach);
+  # the test project runs on net10.0 and loads the net8.0 assembly by forward
+  # compat. Both SDKs are installed so the net8.0 ref pack and the net10.0 test
+  # runtime are available.
+  dotnet:
+    name: dotnet build/format/test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up .NET (8 + 10)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build (Release)
+        run: dotnet build --no-restore -c Release
+
+      - name: Format check
+        run: dotnet format --verify-no-changes
+
+      - name: Test (Release)
+        run: dotnet test --no-build -c Release
+
+  # Cross-language equivalence gate (US5, T070, ADR 0004): the SAME
+  # conformance/fixtures/*.json must pass in BOTH languages. This single job runs
+  # the Python and .NET conformance harnesses; it passes only if both pass, so
+  # parity is enforced for every domain both sides implement (store now; widening
+  # as later .NET slices light up session/warmup/auth/telemetry). It never
+  # regresses: a divergence fails this check.
+  equivalence:
+    name: conformance equivalence (CC-001..CC-007)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: python/pyproject.toml
+
+      - name: Set up .NET (8 + 10)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Python conformance (core, no azure)
+        working-directory: python
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          pytest tests/conformance -q
+
+      - name: .NET conformance
+        working-directory: dotnet
+        run: dotnet test -c Release --filter Category=Conformance

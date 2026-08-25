@@ -66,6 +66,15 @@ class FoundryUnavailable(SessionError):
     """Raised when the Foundry control plane is unavailable or times out."""
 
 
+class NoAgentVersionAvailable(SessionError):
+    """Raised when creating a session but the agent has no published version.
+
+    Foundry requires a ``version_indicator`` to back a session; when no explicit
+    version is configured and the agent exposes none, the session cannot be
+    created.
+    """
+
+
 # --- Authentication errors (US4, contracts/credential-provider.md) ---
 
 
