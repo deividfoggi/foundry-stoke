@@ -106,10 +106,10 @@ Componente: warm-up.
 - [x] T043 **Tracer bullet** `KeepaliveStrategy` (Python): executa `WarmupProbe` dentro da janela de idle via clock injetado, renovando a sessão sob `VirtualClock` (`python/foundry_stoke/warmup/keepalive.py`) (US3, FR-013, ADR 0003)
 - [x] T044 `PreProvisionPoolStrategy` (Python): pool de N sessões quentes por definição de agente, reabastecimento até `targetSize`, persistência do `WarmPoolRegistry` no store (`python/foundry_stoke/warmup/pool.py`) (US3, FR-014, FR-015, CC-006, data-model.md)
 - [x] T045 [SEC-007] Teto configurável de `targetSize` + backoff exponencial com jitter + teto de tentativas em falha de reconciliação + métrica `stoke.warmup.refill` (Python) (`python/foundry_stoke/warmup/pool.py`) (ADR 0003, SEC-007)
-- [ ] [P] T046 Interface `IWarmupStrategy` (.NET) (`dotnet/Foundry.Stoke/Warmup/IWarmupStrategy.cs`) (US3, FR-012, ADR 0003)
-- [ ] [P] T047 `KeepaliveStrategy` (.NET) via `BackgroundService`/`PeriodicTimer` + clock injetado (`dotnet/Foundry.Stoke/Warmup/KeepaliveStrategy.cs`) (US3, FR-013, ADR 0003)
-- [ ] [P] T048 `PreProvisionPoolStrategy` (.NET): pool por definição, reabastecimento até `targetSize`, `WarmPoolRegistry` no store (`dotnet/Foundry.Stoke/Warmup/PreProvisionPoolStrategy.cs`) (US3, FR-014, FR-015, CC-006)
-- [ ] [P] T049 [SEC-007] Teto de `targetSize` + backoff/jitter + teto de tentativas + métrica `stoke.warmup.refill` (.NET) (`dotnet/Foundry.Stoke/Warmup/PreProvisionPoolStrategy.cs`) (ADR 0003, SEC-007)
+- [x] [P] T046 Interface `IWarmupStrategy` (.NET) + `WarmupReport` (`dotnet/Foundry.Stoke/Warmup/IWarmupStrategy.cs`, `WarmupReport.cs`) (US3, FR-012, ADR 0003)
+- [x] [P] T047 `KeepaliveStrategy` (.NET): loop não-bloqueante dirigido pelo `IClock` injetado (espelha o loop asyncio do Python em vez de `BackgroundService`/`PeriodicTimer`, mantendo a lib sem dependências) + probe do usuário (CC-007) (`dotnet/Foundry.Stoke/Warmup/KeepaliveStrategy.cs`) (US3, FR-013, ADR 0003)
+- [x] [P] T048 `PreProvisionPoolStrategy` (.NET): pool por definição, reabastecimento até `targetSize`, `WarmPoolRegistry` no store, `_filter_ready` evicta terminais + Unknown (`dotnet/Foundry.Stoke/Warmup/PreProvisionPoolStrategy.cs`) (US3, FR-014, FR-015, CC-006)
+- [x] [P] T049 [SEC-007] Teto de `targetSize` + backoff exponencial/full jitter + teto de tentativas + métrica `stoke.warmup.refill` (.NET) (`dotnet/Foundry.Stoke/Warmup/PreProvisionPoolStrategy.cs`) (ADR 0003, SEC-007)
 - [ ] T050 Spans `stoke.warmup.probe/refill` na camada de warm-up (Python + .NET) (`python/foundry_stoke/warmup/`, `dotnet/Foundry.Stoke/Warmup/`) (FR-024)
 
 ---
@@ -144,7 +144,7 @@ Depende de: US1 (`SessionController`). Componente: auth (`CredentialProvider`), 
 Propriedade transversal, validada após as capacidades funcionais. Componente: conformance suite.
 
 - [x] T068 Harness fino de conformidade (Python): executa as fixtures agnósticas de `conformance/fixtures/` e valida equivalência semântica (`python/tests/conformance/`) (US5, FR-022, SC-001, ADR 0004)
-- [ ] [P] T069 Harness fino de conformidade (.NET): executa as mesmas fixtures (`dotnet/Foundry.Stoke.Tests/Conformance/`, `Category=Conformance`) (US5, FR-022, SC-001, ADR 0004) — parcial: harness lê `conformance/fixtures/*.json` e executa o domínio `store` (7 casos verdes) contra os provedores InMemory E FileSystem; demais domínios (session/warmup/auth/telemetry) despachados nas próximas fatias
+- [ ] [P] T069 Harness fino de conformidade (.NET): executa as mesmas fixtures (`dotnet/Foundry.Stoke.Tests/Conformance/`, `Category=Conformance`) (US5, FR-022, SC-001, ADR 0004) — parcial: harness lê `conformance/fixtures/*.json` e executa o domínio `store` (7 casos verdes) contra os provedores InMemory E FileSystem; domínios `store` (7 casos x2 provedores), `session` (6 casos) e `warmup` (8 casos: CC-006, CC-007, eviction terminal/unknown, idle-stays-ready, SEC-007 ceiling, keepalive antes do idle) verdes; domínios `auth`/`telemetry` nas próximas fatias
 - [ ] T070 [CI/CD] Verificação de equivalência CC-001..CC-007 entre Python e .NET integrada ao CI (gate de release) (`.github/workflows/ci.yml`, `.github/workflows/dotnet-ci.yml`) (US5, SC-001, ADR 0004) — parcial: gate `equivalence` no `dotnet-ci.yml` roda AS DUAS suítes de conformidade (Python + .NET) e só passa se ambas passarem; cobre a interseção de domínios implementados (hoje: store) e alarga quando as próximas fatias .NET acenderem session/warmup/auth/telemetry. Falta tornar o check obrigatório via branch protection e o gate de release NuGet (T009)
 
 ---
