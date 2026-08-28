@@ -5,11 +5,8 @@ namespace Foundry.Stoke.Warmup;
 /// of the Python <c>CallableProbe</c>. Used for Invocations/custom containers
 /// whose schema is defined by the user; Stoke never attaches credentials when
 /// invoking it and passes only the agent definition and session identifiers.
-///
-/// Note: the built-in generic <c>ResponsesPingProbe</c> is intentionally not
-/// implemented in this slice. It depends on trusted-endpoint validation
-/// (SEC-010, https + expected host) which lands with the auth slice; a
-/// user-supplied probe is the only source here.
+/// The built-in generic <see cref="ResponsesPingProbe"/> covers Responses-
+/// compatible agents.
 /// </summary>
 public sealed class CallableProbe : IWarmupProbe
 {
