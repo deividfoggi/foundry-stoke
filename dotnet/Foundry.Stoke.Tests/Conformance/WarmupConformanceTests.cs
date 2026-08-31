@@ -183,7 +183,7 @@ public sealed class WarmupConformanceTests
             probe, clock, interval, (string)caseObj["agent_definition_id"]!, sessionIds);
 
         await strategy.StartAsync();
-        await PumpUntil(() => probe.Count >= (int)expect["before_first_interval"]!);
+        await strategy.WaitParkedAsync();
         Assert.Equal((int)expect["before_first_interval"]!, probe.Count);
 
         var perInterval = (int)expect["probed_per_interval"]!;
@@ -191,8 +191,9 @@ public sealed class WarmupConformanceTests
         for (var elapsed = 1; elapsed <= advanceIntervals; elapsed++)
         {
             await clock.AdvanceAsync(interval);
-            await PumpUntil(() => probe.Count >= perInterval * elapsed);
+            await strategy.WaitCycleAsync();
             Assert.Equal(perInterval * elapsed, probe.Count);
+            await strategy.WaitParkedAsync();
         }
 
         Assert.Equal((int)expect["total_after_advance"]!, probe.Count);
@@ -215,18 +216,6 @@ public sealed class WarmupConformanceTests
         var expected = (int)caseObj["expect"]!.AsObject()["probed"]!;
         Assert.Equal(expected, report.Probed);
         Assert.Equal(expected, calls.Count);
-    }
-
-    // Deterministic pump for the manual-advance keepalive loop: yields until the
-    // background reconcile continuations scheduled by a virtual-clock advance
-    // have run. No real time elapses; the cap guards against a logic regression
-    // never reaching the expected count.
-    private static async Task PumpUntil(Func<bool> condition, int maxYields = 1000)
-    {
-        for (var i = 0; i < maxYields && !condition(); i++)
-        {
-            await Task.Yield();
-        }
     }
 
     private sealed class RecordingProbe : IWarmupProbe
