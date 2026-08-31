@@ -24,6 +24,18 @@ public sealed class KeepaliveStrategy : IWarmupStrategy
     private Task? _loopTask;
     private CancellationTokenSource? _cts;
 
+    // Test synchronization seams (InternalsVisibleTo): a manual-advance timing
+    // test awaits WaitParkedAsync before advancing the clock (guaranteeing the
+    // delay waiter is registered) and WaitCycleAsync after (guaranteeing the
+    // reconcile finished), making the background loop deterministic regardless of
+    // how continuations are scheduled.
+    private readonly AsyncAutoResetEvent _parked = new();
+    private readonly AsyncAutoResetEvent _cycle = new();
+
+    internal Task WaitParkedAsync() => _parked.WaitAsync();
+
+    internal Task WaitCycleAsync() => _cycle.WaitAsync();
+
     public KeepaliveStrategy(
         IWarmupProbe probe,
         IClock clock,
@@ -122,9 +134,15 @@ public sealed class KeepaliveStrategy : IWarmupStrategy
     {
         while (_running)
         {
+            // Register the delay first (a VirtualClock enrolls the waiter
+            // synchronously), then announce the loop is parked so a timing test
+            // can advance the clock without racing the registration.
+            var delay = _clock.DelayAsync(_interval);
+            _parked.Set();
+
             try
             {
-                await DelayOrCancel(_interval, cancellationToken).ConfigureAwait(false);
+                await RaceCancel(delay, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -137,15 +155,15 @@ public sealed class KeepaliveStrategy : IWarmupStrategy
             }
 
             await ReconcileAsync().ConfigureAwait(false);
+            _cycle.Set();
         }
     }
 
-    // Awaits the injected clock's delay but stays cancellable: a VirtualClock
-    // delay that is never advanced would otherwise leave the loop parked past
+    // Awaits an already-started delay but stays cancellable: a VirtualClock delay
+    // that is never advanced would otherwise leave the loop parked past
     // StopAsync. Racing the delay against the token lets the loop exit promptly.
-    private async Task DelayOrCancel(double seconds, CancellationToken cancellationToken)
+    private static async Task RaceCancel(Task delay, CancellationToken cancellationToken)
     {
-        var delay = _clock.DelayAsync(seconds);
         var cancelSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var registration = cancellationToken.Register(() => cancelSignal.TrySetResult());
         var completed = await Task.WhenAny(delay, cancelSignal.Task).ConfigureAwait(false);
@@ -155,5 +173,48 @@ public sealed class KeepaliveStrategy : IWarmupStrategy
         }
 
         await delay.ConfigureAwait(false);
+    }
+
+    // Minimal async auto-reset event: Set releases one waiter or latches for the
+    // next WaitAsync. Used only as a deterministic test-synchronization seam.
+    private sealed class AsyncAutoResetEvent
+    {
+        private readonly object _gate = new();
+        private TaskCompletionSource? _waiter;
+        private bool _signaled;
+
+        public Task WaitAsync()
+        {
+            lock (_gate)
+            {
+                if (_signaled)
+                {
+                    _signaled = false;
+                    return Task.CompletedTask;
+                }
+
+                _waiter = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                return _waiter.Task;
+            }
+        }
+
+        public void Set()
+        {
+            TaskCompletionSource? toRelease = null;
+            lock (_gate)
+            {
+                if (_waiter is not null)
+                {
+                    toRelease = _waiter;
+                    _waiter = null;
+                }
+                else
+                {
+                    _signaled = true;
+                }
+            }
+
+            toRelease?.TrySetResult();
+        }
     }
 }
