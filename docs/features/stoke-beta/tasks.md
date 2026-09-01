@@ -50,7 +50,7 @@ usadas por múltiplas User Stories.
 - [x] [P] T010 Tipos de erro tipados (Python): conflito de concorrência, sessão encerrada, credencial ausente, idle timeout inválido (`python/foundry_stoke/errors.py`) (contracts/README; FR-005)
 - [x] [P] T011 Tipos de erro/exceção tipados (.NET): equivalentes semânticos (`dotnet/Foundry.Stoke/Errors/`) (contracts/README; FR-005)
 - [x] [P] T012 Base de telemetria OpenTelemetry namespace `stoke.*` (Python): spans/atributos comuns, sem emitir segredos (`python/foundry_stoke/observability.py`) (FR-024, ADR 0006)
-- [ ] [P] T013 Base de telemetria OpenTelemetry namespace `stoke.*` (.NET): equivalente (`dotnet/Foundry.Stoke/Observability/`) (FR-024, ADR 0006)
+- [x] [P] T013 Base de telemetria OpenTelemetry namespace `stoke.*` (.NET): equivalente (`dotnet/Foundry.Stoke/Observability/`) (FR-024, ADR 0006)
 - [x] [P] T014 Abstração Clock/Scheduler não bloqueante (Python): `Clock`/`Scheduler` com delay async (asyncio) + `VirtualClock` para testes determinísticos (`python/foundry_stoke/scheduling/clock.py`) (ADR 0003; contracts/clock-scheduler.md)
 - [x] [P] T015 Abstração Clock/Scheduler não bloqueante (.NET): `IClock` + `SystemClock` (`Task.Delay`, sem `Thread.Sleep`) + `VirtualClock` determinístico (`dotnet/Foundry.Stoke/Scheduling/`) (ADR 0003; contracts/clock-scheduler.md)
 - [ ] [P] T016 Entrypoint `StokeClient` skeleton (Python): composição de providers/estratégias (`python/foundry_stoke/client.py`) (plan.md)
@@ -133,9 +133,9 @@ Depende de: US1 (`SessionController`). Componente: auth (`CredentialProvider`), 
 - [x] [P] T062 [SEC-010] Validação do endpoint de probe (https + host esperado), sem credenciais anexadas ao probe (.NET) (`dotnet/Foundry.Stoke/Endpoints.cs`) (ADR 0007, SEC-010)
 - [x] [P] T063 [SEC-008] Modelo de confiança de providers plugáveis (.NET): probe/store nunca recebem segredos (por design + teste) + validar invariantes de registros retornados (`RecordInvariants`) (`dotnet/Foundry.Stoke/Store/RecordInvariants.cs`, `dotnet/Foundry.Stoke/Warmup/ResponsesPingProbe.cs`) (ADR 0007, SEC-008)
 - [x] T064 [SEC-003] Política de redação por allowlist na telemetria (Python): nunca emitir connection string/API key/token/endpoint-com-chave/payload; sanitizar mensagens de exceção; teste de ausência de padrões de segredo (`python/foundry_stoke/observability.py`, `python/tests/test_telemetry_redaction.py`) (ADR 0006, SEC-003)
-- [ ] [P] T065 [SEC-003] Política de redação por allowlist na telemetria (.NET) + teste de no-secret-pattern (`dotnet/Foundry.Stoke/Observability/`, `dotnet/Foundry.Stoke.Tests/NoSecretInTelemetryTests.cs`) (ADR 0006, SEC-003)
+- [x] [P] T065 [SEC-003] Política de redação por allowlist na telemetria (.NET) + teste de no-secret-pattern (`dotnet/Foundry.Stoke/Observability/Redaction.cs`, `dotnet/Foundry.Stoke.Tests/TelemetryTests.cs`) (ADR 0006, SEC-003)
 - [x] T066 [SEC-009] `agent_session_id` tratado como sensível na telemetria (Python): omitir/truncar/hashear em spans de baixa severidade + nota "partição não é authz" no data-model (`python/foundry_stoke/observability.py`) (ADR 0006, SEC-009, data-model.md)
-- [ ] [P] T067 [SEC-009] `agent_session_id` sensível na telemetria (.NET) (`dotnet/Foundry.Stoke/Observability/`) (ADR 0006, SEC-009)
+- [x] [P] T067 [SEC-009] `agent_session_id` sensível na telemetria (.NET) (`dotnet/Foundry.Stoke/Observability/Redaction.cs`) (ADR 0006, SEC-009)
 
 ---
 
@@ -144,7 +144,7 @@ Depende de: US1 (`SessionController`). Componente: auth (`CredentialProvider`), 
 Propriedade transversal, validada após as capacidades funcionais. Componente: conformance suite.
 
 - [x] T068 Harness fino de conformidade (Python): executa as fixtures agnósticas de `conformance/fixtures/` e valida equivalência semântica (`python/tests/conformance/`) (US5, FR-022, SC-001, ADR 0004)
-- [ ] [P] T069 Harness fino de conformidade (.NET): executa as mesmas fixtures (`dotnet/Foundry.Stoke.Tests/Conformance/`, `Category=Conformance`) (US5, FR-022, SC-001, ADR 0004) — parcial: harness lê `conformance/fixtures/*.json` e executa o domínio `store` (7 casos verdes) contra os provedores InMemory E FileSystem; domínios `store` (7 casos x2 provedores), `session` (6 casos), `warmup` (8 casos: CC-006, CC-007, eviction terminal/unknown, idle-stays-ready, SEC-007 ceiling, keepalive antes do idle) e `auth` (7 casos: precedência injetada/primário, fallback api-key/conn-string, api-key precede conn-string, token-probe-falha, CC-005 no-credential) verdes; domínio `telemetry` na próxima fatia
+- [ ] [P] T069 Harness fino de conformidade (.NET): executa as mesmas fixtures (`dotnet/Foundry.Stoke.Tests/Conformance/`, `Category=Conformance`) (US5, FR-022, SC-001, ADR 0004) — parcial: harness lê `conformance/fixtures/*.json` e executa o domínio `store` (7 casos verdes) contra os provedores InMemory E FileSystem; domínios `store` (7 casos x2 provedores), `session` (6 casos), `warmup` (8 casos: CC-006, CC-007, eviction terminal/unknown, idle-stays-ready, SEC-007 ceiling, keepalive antes do idle) `auth` (7 casos: precedência injetada/primário, fallback api-key/conn-string, api-key precede conn-string, token-probe-falha, CC-005 no-credential) e `telemetry` (4 casos: SEC-003 allowlist, SEC-009 session-id hashed@info/plaintext@error, SEC-003 mensagem de exceção sanitizada) verdes; 5 domínios completos
 - [ ] T070 [CI/CD] Verificação de equivalência CC-001..CC-007 entre Python e .NET integrada ao CI (gate de release) (`.github/workflows/ci.yml`, `.github/workflows/dotnet-ci.yml`) (US5, SC-001, ADR 0004) — parcial: gate `equivalence` no `dotnet-ci.yml` roda AS DUAS suítes de conformidade (Python + .NET) e só passa se ambas passarem; cobre a interseção de domínios implementados (hoje: store) e alarga quando as próximas fatias .NET acenderem session/warmup/auth/telemetry. Falta tornar o check obrigatório via branch protection e o gate de release NuGet (T009)
 
 ---
