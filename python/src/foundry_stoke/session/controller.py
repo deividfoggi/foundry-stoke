@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Protocol, runtime_checkable
 
+from foundry_stoke._tracing import session_span
 from foundry_stoke.errors import InvalidIdleTimeout, SessionClosed
 from foundry_stoke.models import SessionOrigin, SessionState, TrackedSession
 
@@ -100,25 +101,26 @@ class SessionController:
         agent_definition_id: str,
         idle_timeout_seconds: int = DEFAULT_IDLE_TIMEOUT_SECONDS,
     ) -> TrackedSession:
-        if not (MIN_IDLE_TIMEOUT_SECONDS <= idle_timeout_seconds <= MAX_IDLE_TIMEOUT_SECONDS):
-            raise InvalidIdleTimeout(
-                "idle_timeout_seconds must be within "
-                f"{MIN_IDLE_TIMEOUT_SECONDS}..{MAX_IDLE_TIMEOUT_SECONDS} "
-                f"(got {idle_timeout_seconds})"
+        with session_span("stoke.session.create"):
+            if not (MIN_IDLE_TIMEOUT_SECONDS <= idle_timeout_seconds <= MAX_IDLE_TIMEOUT_SECONDS):
+                raise InvalidIdleTimeout(
+                    "idle_timeout_seconds must be within "
+                    f"{MIN_IDLE_TIMEOUT_SECONDS}..{MAX_IDLE_TIMEOUT_SECONDS} "
+                    f"(got {idle_timeout_seconds})"
+                )
+            raw = await self._ops.create_session(agent_definition_id, idle_timeout_seconds)
+            now = _utcnow()
+            state = self._translate(raw.status)
+            self._last_state[(agent_definition_id, raw.agent_session_id)] = state
+            return TrackedSession(
+                agent_session_id=raw.agent_session_id,
+                agent_definition_id=agent_definition_id,
+                state=state,
+                idle_timeout_seconds=idle_timeout_seconds,
+                last_activity_at=now,
+                created_at=now,
+                origin=SessionOrigin.ON_DEMAND,
             )
-        raw = await self._ops.create_session(agent_definition_id, idle_timeout_seconds)
-        now = _utcnow()
-        state = self._translate(raw.status)
-        self._last_state[(agent_definition_id, raw.agent_session_id)] = state
-        return TrackedSession(
-            agent_session_id=raw.agent_session_id,
-            agent_definition_id=agent_definition_id,
-            state=state,
-            idle_timeout_seconds=idle_timeout_seconds,
-            last_activity_at=now,
-            created_at=now,
-            origin=SessionOrigin.ON_DEMAND,
-        )
 
     async def get_session(
         self,
@@ -126,22 +128,25 @@ class SessionController:
         agent_session_id: str,
         idle_timeout_seconds: int = DEFAULT_IDLE_TIMEOUT_SECONDS,
     ) -> TrackedSession:
-        self._ensure_open(agent_definition_id, agent_session_id)
-        raw = await self._ops.get_session(agent_definition_id, agent_session_id)
-        state = self._translate(raw.status)
-        now = _utcnow()
-        key = (agent_definition_id, agent_session_id)
-        # Derived resume: a session previously seen idle, now active again.
-        resumed = self._last_state.get(key) is SessionState.IDLE and state is SessionState.ACTIVE
-        self._last_state[key] = state
-        return TrackedSession(
-            agent_session_id=raw.agent_session_id,
-            agent_definition_id=agent_definition_id,
-            state=state,
-            idle_timeout_seconds=idle_timeout_seconds,
-            last_activity_at=now,
-            resumed_at=now if resumed else None,
-        )
+        with session_span("stoke.session.get", agent_session_id):
+            self._ensure_open(agent_definition_id, agent_session_id)
+            raw = await self._ops.get_session(agent_definition_id, agent_session_id)
+            state = self._translate(raw.status)
+            now = _utcnow()
+            key = (agent_definition_id, agent_session_id)
+            # Derived resume: a session previously seen idle, now active again.
+            resumed = (
+                self._last_state.get(key) is SessionState.IDLE and state is SessionState.ACTIVE
+            )
+            self._last_state[key] = state
+            return TrackedSession(
+                agent_session_id=raw.agent_session_id,
+                agent_definition_id=agent_definition_id,
+                state=state,
+                idle_timeout_seconds=idle_timeout_seconds,
+                last_activity_at=now,
+                resumed_at=now if resumed else None,
+            )
 
     async def list_sessions(self, agent_definition_id: str) -> list[TrackedSession]:
         raws = await self._ops.list_sessions(agent_definition_id)
@@ -158,13 +163,15 @@ class SessionController:
         ]
 
     async def stop_session(self, agent_definition_id: str, agent_session_id: str) -> None:
-        self._ensure_open(agent_definition_id, agent_session_id)
-        await self._ops.stop_session(agent_definition_id, agent_session_id)
+        with session_span("stoke.session.stop", agent_session_id):
+            self._ensure_open(agent_definition_id, agent_session_id)
+            await self._ops.stop_session(agent_definition_id, agent_session_id)
 
     async def delete_session(self, agent_definition_id: str, agent_session_id: str) -> None:
-        self._ensure_open(agent_definition_id, agent_session_id)
-        await self._ops.delete_session(agent_definition_id, agent_session_id)
-        self._closed.add((agent_definition_id, agent_session_id))
+        with session_span("stoke.session.delete", agent_session_id):
+            self._ensure_open(agent_definition_id, agent_session_id)
+            await self._ops.delete_session(agent_definition_id, agent_session_id)
+            self._closed.add((agent_definition_id, agent_session_id))
 
     def _ensure_open(self, agent_definition_id: str, agent_session_id: str) -> None:
         if (agent_definition_id, agent_session_id) in self._closed:

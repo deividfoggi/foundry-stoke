@@ -16,9 +16,11 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import random
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
+from foundry_stoke._tracing import warmup_span
 from foundry_stoke.errors import AlreadyExists, NotFound, TargetSizeExceeded
 from foundry_stoke.models import (
     TERMINAL_SESSION_STATES,
@@ -106,8 +108,12 @@ class PreProvisionPoolStrategy:
         return self._registry_id
 
     async def reconcile(self) -> WarmupReport:
+        with warmup_span("stoke.warmup.refill", "pre-provision-pool") as mark_failed:
+            return await self._reconcile(mark_failed)
+
+    async def _reconcile(self, mark_failed: Callable[[], None]) -> WarmupReport:
         etag, registry = await self._load_registry()
-        ready, evicted = await self._filter_ready(registry.tracked_session_ids)
+        ready, evicted = await self._filter_ready(registry.tracked_session_ids, mark_failed)
         created = 0
         failures = 0
         attempt = 0
@@ -115,6 +121,7 @@ class PreProvisionPoolStrategy:
             try:
                 session = await self._controller.create_session(self._agent_definition_id)
             except Exception as exc:  # noqa: BLE001 - transient unavailability, retried with backoff
+                mark_failed()
                 failures += 1
                 attempt += 1
                 self._telemetry.record_exception(
@@ -154,7 +161,9 @@ class PreProvisionPoolStrategy:
             evicted=evicted,
         )
 
-    async def _filter_ready(self, session_ids: list[str]) -> tuple[list[str], int]:
+    async def _filter_ready(
+        self, session_ids: list[str], mark_failed: Callable[[], None]
+    ) -> tuple[list[str], int]:
         """Keep only sessions still ready; evict terminal/unknown ones (data-model).
 
         Terminal states (FAILED, EXPIRED, DELETED, DELETING) and UNKNOWN are
@@ -168,6 +177,7 @@ class PreProvisionPoolStrategy:
             try:
                 session = await self._controller.get_session(self._agent_definition_id, session_id)
             except Exception:  # noqa: BLE001 - an unqueryable session is not ready
+                mark_failed()
                 evicted += 1
                 continue
             if session.state in TERMINAL_SESSION_STATES or session.state is SessionState.UNKNOWN:

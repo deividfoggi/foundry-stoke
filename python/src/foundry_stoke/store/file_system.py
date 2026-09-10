@@ -33,6 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from foundry_stoke._tracing import store_operation
 from foundry_stoke.errors import (
     AlreadyExists,
     ConcurrencyConflict,
@@ -255,19 +256,24 @@ class FileSystemStore:
 
     # --- async surface (non-blocking) ---
 
+    @store_operation("stoke.store.write", "file_system")
     async def create(self, record: StoreRecord) -> StoreRecord:
         return await asyncio.to_thread(self._create_sync, record)
 
+    @store_operation("stoke.store.read", "file_system")
     async def read(self, id: str, partition_key: str) -> StoreRecord:
         record_path = self._record_path(id, partition_key)
         return await asyncio.to_thread(self._read_file, record_path)
 
+    @store_operation("stoke.store.write", "file_system")
     async def upsert(self, record: StoreRecord, expected_etag: str | None) -> StoreRecord:
         return await asyncio.to_thread(self._upsert_sync, record, expected_etag)
 
+    @store_operation("stoke.store.write", "file_system")
     async def delete(self, id: str, partition_key: str, expected_etag: str | None = None) -> None:
         await asyncio.to_thread(self._delete_sync, id, partition_key, expected_etag)
 
+    @store_operation("stoke.store.read", "file_system")
     async def query_by_partition(
         self, partition_key: str, type_filter: str | None = None
     ) -> list[StoreRecord]:

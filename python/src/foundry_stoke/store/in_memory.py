@@ -11,6 +11,7 @@ import copy
 import uuid
 from datetime import datetime, timezone
 
+from foundry_stoke._tracing import store_operation
 from foundry_stoke.errors import (
     AlreadyExists,
     ConcurrencyConflict,
@@ -35,6 +36,7 @@ class InMemoryStore:
         self._records: dict[tuple[str, str], StoreRecord] = {}
         self._lock = asyncio.Lock()
 
+    @store_operation("stoke.store.write", "in_memory")
     async def create(self, record: StoreRecord) -> StoreRecord:
         key = (record.partition_key, record.id)
         async with self._lock:
@@ -48,6 +50,7 @@ class InMemoryStore:
             self._records[key] = stored
             return copy.deepcopy(stored)
 
+    @store_operation("stoke.store.read", "in_memory")
     async def read(self, id: str, partition_key: str) -> StoreRecord:
         async with self._lock:
             existing = self._records.get((partition_key, id))
@@ -55,6 +58,7 @@ class InMemoryStore:
                 raise NotFound(f"no record for id={id!r} in partition")
             return copy.deepcopy(existing)
 
+    @store_operation("stoke.store.write", "in_memory")
     async def upsert(self, record: StoreRecord, expected_etag: str | None) -> StoreRecord:
         key = (record.partition_key, record.id)
         async with self._lock:
@@ -71,6 +75,7 @@ class InMemoryStore:
             self._records[key] = stored
             return copy.deepcopy(stored)
 
+    @store_operation("stoke.store.write", "in_memory")
     async def delete(self, id: str, partition_key: str, expected_etag: str | None = None) -> None:
         key = (partition_key, id)
         async with self._lock:
@@ -81,6 +86,7 @@ class InMemoryStore:
                 raise ConcurrencyConflict(f"etag mismatch for id={id!r}: record was modified")
             del self._records[key]
 
+    @store_operation("stoke.store.read", "in_memory")
     async def query_by_partition(
         self, partition_key: str, type_filter: str | None = None
     ) -> list[StoreRecord]:

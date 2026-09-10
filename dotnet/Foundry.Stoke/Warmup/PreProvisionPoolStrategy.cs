@@ -83,10 +83,13 @@ public sealed class PreProvisionPoolStrategy : IWarmupStrategy
 
     public string RegistryId => _registryId;
 
-    public async Task<WarmupReport> ReconcileAsync()
+    public Task<WarmupReport> ReconcileAsync() =>
+        WarmupTracing.RunAsync("stoke.warmup.refill", "pre-provision-pool", ReconcileCoreAsync);
+
+    private async Task<WarmupReport> ReconcileCoreAsync(Action markFailed)
     {
         var (etag, registry) = await LoadRegistryAsync().ConfigureAwait(false);
-        var (ready, evicted) = await FilterReadyAsync(registry.TrackedSessionIds).ConfigureAwait(false);
+        var (ready, evicted) = await FilterReadyAsync(registry.TrackedSessionIds, markFailed).ConfigureAwait(false);
         var created = 0;
         var failures = 0;
         var attempt = 0;
@@ -100,6 +103,7 @@ public sealed class PreProvisionPoolStrategy : IWarmupStrategy
             catch (Exception exc)
             {
                 // Transient unavailability: retry with backoff up to the ceiling.
+                markFailed();
                 failures++;
                 attempt++;
                 _telemetry.RecordException("stoke.warmup.refill", exc, _agentDefinitionId);
@@ -199,7 +203,7 @@ public sealed class PreProvisionPoolStrategy : IWarmupStrategy
     // counted toward the target: they are dropped so the refill loop replaces
     // them. IDLE stays (a reprovision/keepalive candidate). A session that can no
     // longer be queried is treated as not ready.
-    private async Task<(List<string> Ready, int Evicted)> FilterReadyAsync(List<string> sessionIds)
+    private async Task<(List<string> Ready, int Evicted)> FilterReadyAsync(List<string> sessionIds, Action markFailed)
     {
         var ready = new List<string>();
         var evicted = 0;
@@ -213,6 +217,7 @@ public sealed class PreProvisionPoolStrategy : IWarmupStrategy
             catch (Exception)
             {
                 // An unqueryable session is not ready.
+                markFailed();
                 evicted++;
                 continue;
             }

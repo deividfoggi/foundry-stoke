@@ -1,4 +1,5 @@
 using Foundry.Stoke.Errors;
+using Foundry.Stoke.Observability;
 
 namespace Foundry.Stoke.Store;
 
@@ -13,7 +14,8 @@ public sealed class InMemoryStore : IDurableStoreProvider
     private readonly Dictionary<(string PartitionKey, string Id), StoreRecord> _records = new();
     private readonly SemaphoreSlim _lock = new(1, 1);
 
-    public async Task<StoreRecord> CreateAsync(StoreRecord record, CancellationToken cancellationToken = default)
+    public Task<StoreRecord> CreateAsync(StoreRecord record, CancellationToken cancellationToken = default)
+        => StoreTracing.RunAsync("stoke.store.write", "in_memory", async () =>
     {
         var key = (record.PartitionKey, record.Id);
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -36,9 +38,10 @@ public sealed class InMemoryStore : IDurableStoreProvider
         {
             _lock.Release();
         }
-    }
+    });
 
-    public async Task<StoreRecord> ReadAsync(string id, string partitionKey, CancellationToken cancellationToken = default)
+    public Task<StoreRecord> ReadAsync(string id, string partitionKey, CancellationToken cancellationToken = default)
+        => StoreTracing.RunAsync("stoke.store.read", "in_memory", async () =>
     {
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -54,9 +57,10 @@ public sealed class InMemoryStore : IDurableStoreProvider
         {
             _lock.Release();
         }
-    }
+    });
 
-    public async Task<StoreRecord> UpsertAsync(StoreRecord record, string? expectedEtag, CancellationToken cancellationToken = default)
+    public Task<StoreRecord> UpsertAsync(StoreRecord record, string? expectedEtag, CancellationToken cancellationToken = default)
+        => StoreTracing.RunAsync("stoke.store.write", "in_memory", async () =>
     {
         var key = (record.PartitionKey, record.Id);
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -80,9 +84,10 @@ public sealed class InMemoryStore : IDurableStoreProvider
         {
             _lock.Release();
         }
-    }
+    });
 
-    public async Task DeleteAsync(string id, string partitionKey, string? expectedEtag = null, CancellationToken cancellationToken = default)
+    public Task DeleteAsync(string id, string partitionKey, string? expectedEtag = null, CancellationToken cancellationToken = default)
+        => StoreTracing.RunAsync("stoke.store.write", "in_memory", async () =>
     {
         var key = (partitionKey, id);
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -104,9 +109,10 @@ public sealed class InMemoryStore : IDurableStoreProvider
         {
             _lock.Release();
         }
-    }
+    });
 
-    public async Task<IReadOnlyList<StoreRecord>> QueryByPartitionAsync(string partitionKey, string? typeFilter = null, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<StoreRecord>> QueryByPartitionAsync(string partitionKey, string? typeFilter = null, CancellationToken cancellationToken = default)
+        => StoreTracing.RunAsync<IReadOnlyList<StoreRecord>>("stoke.store.read", "in_memory", async () =>
     {
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -121,7 +127,7 @@ public sealed class InMemoryStore : IDurableStoreProvider
         {
             _lock.Release();
         }
-    }
+    });
 
     private static string NewEtag() => Guid.NewGuid().ToString("N");
 }

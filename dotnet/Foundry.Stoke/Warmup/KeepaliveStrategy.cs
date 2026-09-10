@@ -61,7 +61,15 @@ public sealed class KeepaliveStrategy : IWarmupStrategy
             ProbeResult result;
             try
             {
-                result = await _probe.ProbeAsync(_agentDefinitionId, sessionId).ConfigureAwait(false);
+                result = await WarmupTracing.RunAsync("stoke.warmup.probe", "keepalive", async markFailed =>
+                {
+                    var probeResult = await _probe.ProbeAsync(_agentDefinitionId, sessionId).ConfigureAwait(false);
+                    if (!probeResult.Ok)
+                    {
+                        markFailed();
+                    }
+                    return probeResult;
+                }).ConfigureAwait(false);
             }
             catch (Exception exc)
             {
