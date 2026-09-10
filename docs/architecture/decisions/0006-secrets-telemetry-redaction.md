@@ -46,6 +46,21 @@ Adotar a **Option 1**: política de redação por **allowlist** de atributos emi
 
 Justificativa ancorada nas prioridades: a Option 1 é a única que satisfaz a prioridade 1 (falha segura) e a prioridade 3 (determinismo) sem depender da completude de uma lista de padrões. A Option 2 é falha insegura na prioridade 1 e frágil na prioridade 3. O conjunto estável `stoke.*` definido no plano preserva a prioridade 4.
 
+### Integração de tracing para T025
+
+Decisão de integração aprovada pelo desenvolvedor em 2026-09-10, vinculada a T025 e FR-024. Esta aprovação é restrita à integração abaixo e não altera o status deste ADR nem aprova outras decisões.
+
+- Python: disponibilizar `opentelemetry-api` no extra opcional `tracing`, acessado por helper interno. Preservar a instalação padrão sem dependências obrigatórias. Sem a API disponível ou sem provider configurado pela aplicação, o tracing permanece no-op.
+- .NET: usar `System.Diagnostics.ActivitySource` fornecido pelo framework, sem nova dependência de produção. Sem listener habilitado, o tracing permanece no-op.
+- Preservar as APIs públicas de telemetria e os callbacks existentes, sem exigir tracer público injetado. Providers, listeners, exporters e configuração do Application Insights pertencem à aplicação; a Stoke não os instala nem configura. No projeto Python, `opentelemetry-sdk` será dependência exclusiva de testes para verificar spans reais.
+- Nos spans de T025, aplicar allowlist e redação antes da emissão. Omitir ou hashear `agent_session_id`, inclusive em falhas; a permissão geral deste ADR para handles íntegros em eventos de erro não se aplica a esses spans. Nunca emitir handles crus, segredos ou conteúdo de sessão/payload.
+- Desabilitar captura automática de exceções e de suas mensagens em eventos, stack traces ou descrições de status. Registrar falha por status sem descrição sensível; qualquer contexto adicional deve passar explicitamente pela política de redação.
+
+Avaliação das alternativas para esta integração:
+- Extra opcional e helper interno, escolhidos: permitem aplicar as prioridades 1 e 2 antes da emissão, mantêm a integração interna simples (prioridade 3) e oferecem spans reais (prioridade 4). Preservam o core sem dependências, mas exigem instalação do extra e configuração pela aplicação.
+- API OpenTelemetry obrigatória, rejeitada: permite os mesmos controles de segurança e spans reais, mas adiciona dependência à instalação padrão.
+- Tracer público injetado, rejeitado: permite controle explícito pela aplicação, mas amplia o contrato público e a configuração exigida sem necessidade para T025.
+
 ## Implementation Notes
 
 - A allowlist canônica de atributos é o conjunto `stoke.*` documentado em `docs/features/stoke-beta/plan.md` (seção Observabilidade). Qualquer novo atributo exige adição consciente à allowlist.

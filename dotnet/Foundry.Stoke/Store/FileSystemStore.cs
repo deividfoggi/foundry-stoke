@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Foundry.Stoke.Errors;
+using Foundry.Stoke.Observability;
 
 namespace Foundry.Stoke.Store;
 
@@ -61,19 +62,24 @@ public sealed class FileSystemStore : IDurableStoreProvider
     // --- async surface (non-blocking) ---
 
     public Task<StoreRecord> CreateAsync(StoreRecord record, CancellationToken cancellationToken = default)
-        => Task.Run(() => CreateSync(record), cancellationToken);
+        => StoreTracing.RunAsync("stoke.store.write", "file_system",
+            () => Task.Run(() => CreateSync(record), cancellationToken));
 
     public Task<StoreRecord> ReadAsync(string id, string partitionKey, CancellationToken cancellationToken = default)
-        => Task.Run(() => ReadFile(RecordPath(id, partitionKey)), cancellationToken);
+        => StoreTracing.RunAsync("stoke.store.read", "file_system",
+            () => Task.Run(() => ReadFile(RecordPath(id, partitionKey)), cancellationToken));
 
     public Task<StoreRecord> UpsertAsync(StoreRecord record, string? expectedEtag, CancellationToken cancellationToken = default)
-        => Task.Run(() => UpsertSync(record, expectedEtag), cancellationToken);
+        => StoreTracing.RunAsync("stoke.store.write", "file_system",
+            () => Task.Run(() => UpsertSync(record, expectedEtag), cancellationToken));
 
     public Task DeleteAsync(string id, string partitionKey, string? expectedEtag = null, CancellationToken cancellationToken = default)
-        => Task.Run(() => DeleteSync(id, partitionKey, expectedEtag), cancellationToken);
+        => StoreTracing.RunAsync("stoke.store.write", "file_system",
+            () => Task.Run(() => DeleteSync(id, partitionKey, expectedEtag), cancellationToken));
 
     public Task<IReadOnlyList<StoreRecord>> QueryByPartitionAsync(string partitionKey, string? typeFilter = null, CancellationToken cancellationToken = default)
-        => Task.Run(() => QuerySync(partitionKey, typeFilter), cancellationToken);
+        => StoreTracing.RunAsync("stoke.store.read", "file_system",
+            () => Task.Run(() => QuerySync(partitionKey, typeFilter), cancellationToken));
 
     // --- path sanitization (SEC-001) ---
 

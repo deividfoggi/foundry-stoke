@@ -29,3 +29,19 @@ dotnet format dotnet/Foundry.Stoke.sln --verify-no-changes
 `conformance/fixtures/` (the same files the Python harness consumes) and asserts
 behavioral equivalence. Fixtures are the single source of truth for semantic
 parity across languages.
+
+## Session tracing
+
+Subscribe to the `Foundry.Stoke` activity source through an application-owned
+`ActivityListener` or OpenTelemetry provider. The library uses the framework's
+`System.Diagnostics.ActivitySource` without additional production dependencies.
+Providers, listeners, exporters, sampling, and Application Insights configuration belong
+to the application. Without an enabled listener, tracing is a no-op.
+
+Session operations emit `stoke.session.create`, `stoke.session.get`,
+`stoke.session.stop`, and `stoke.session.delete` across their complete asynchronous
+lifetime. Get, stop, and delete attach a hashed session handle. Create omits the handle;
+all four omit free-form identifiers and exception text. Errors and cancellation set error
+status without events, exception messages, stack traces, or status descriptions.
+Existing `Telemetry` callbacks retain their behavior. Store and warmup tracing are outside
+this slice.

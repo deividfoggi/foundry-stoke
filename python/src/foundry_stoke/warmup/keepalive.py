@@ -11,6 +11,7 @@ import asyncio
 import contextlib
 from collections.abc import Sequence
 
+from foundry_stoke._tracing import warmup_span
 from foundry_stoke.observability import Telemetry
 from foundry_stoke.scheduling import Clock
 from foundry_stoke.warmup.probe import WarmupProbe
@@ -44,7 +45,10 @@ class KeepaliveStrategy:
         failures = 0
         for session_id in list(self._session_ids):
             try:
-                result = await self._probe.probe(self._agent_definition_id, session_id)
+                with warmup_span("stoke.warmup.probe", "keepalive") as mark_failed:
+                    result = await self._probe.probe(self._agent_definition_id, session_id)
+                    if not result.ok:
+                        mark_failed()
             except Exception as exc:  # noqa: BLE001 - a failing probe must not stop the loop
                 failures += 1
                 self._telemetry.record_exception(

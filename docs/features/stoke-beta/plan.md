@@ -111,8 +111,18 @@ inclusive no caminho REST fallback do .NET.
 ## Observabilidade
 
 Telemetria via OpenTelemetry, integrável ao Application Insights por
-`APPLICATIONINSIGHTS_CONNECTION_STRING` (FR-024). Amostragem tail-based conforme
-coding-guidelines (100% de erros e requisições lentas; 1-5% do restante).
+`APPLICATIONINSIGHTS_CONNECTION_STRING` (FR-024). A aplicação configura providers,
+listeners, exporters e amostragem; a Stoke não configura a exportação.
+Amostragem tail-based conforme coding-guidelines (100% de erros e requisições
+lentas; 1-5% do restante).
+
+Integração aprovada para T025, conforme ADR 0006:
+- Python: extra opcional `tracing` com `opentelemetry-api` e helper interno; instalação padrão sem dependências obrigatórias e tracing no-op quando indisponível ou sem provider configurado. `opentelemetry-sdk` somente nas dependências de testes do projeto.
+- .NET: `System.Diagnostics.ActivitySource` do framework, sem nova dependência de produção; no-op sem listener habilitado. Preservar as APIs públicas e os callbacks de telemetria em ambas as linguagens.
+- Instrumentar somente `stoke.session.create`, `stoke.session.get`, `stoke.session.stop` e `stoke.session.delete`. Cada span cobre a operação assíncrona, herda o contexto pai ativo, encerra em sucesso, falha ou cancelamento e restaura o contexto anterior.
+- Aplicar allowlist e redação antes da emissão; omitir ou hashear handles também em falhas. Não capturar automaticamente exceções, mensagens ou stack traces, nem incluir conteúdo sensível em descrições de status.
+- Testar spans reais com SDK de teste em Python e `ActivityListener` em .NET: nomes, início e término, contexto pai e sua restauração, sucesso, falha e cancelamento. Verificar ausência de handles crus e segredos em atributos, eventos e status, além do comportamento no-op e da compatibilidade dos callbacks existentes.
+- Instrumentação de store e warmup e configuração de exporters ficam fora de T025.
 
 **Convenção de nomes (Q7)**: OpenTelemetry semantic conventions com namespace `stoke.*`.
 Conjunto estável e pequeno de spans/métricas no beta:
