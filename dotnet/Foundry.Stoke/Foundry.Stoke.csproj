@@ -11,4 +11,8 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Foundry.Stoke.Tests" />
+  </ItemGroup>
+
 </Project>
