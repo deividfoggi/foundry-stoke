@@ -54,7 +54,7 @@ usadas por múltiplas User Stories.
 - [x] [P] T014 Abstração Clock/Scheduler não bloqueante (Python): `Clock`/`Scheduler` com delay async (asyncio) + `VirtualClock` para testes determinísticos (`python/foundry_stoke/scheduling/clock.py`) (ADR 0003; contracts/clock-scheduler.md)
 - [x] [P] T015 Abstração Clock/Scheduler não bloqueante (.NET): `IClock` + `SystemClock` (`Task.Delay`, sem `Thread.Sleep`) + `VirtualClock` determinístico (`dotnet/Foundry.Stoke/Scheduling/`) (ADR 0003; contracts/clock-scheduler.md)
 - [ ] [P] T016 Entrypoint `StokeClient` skeleton (Python): composição de providers/estratégias (`python/foundry_stoke/client.py`) (plan.md)
-- [ ] [P] T017 Entrypoint `StokeClient` skeleton (.NET): equivalente (`dotnet/Foundry.Stoke/StokeClient.cs`) (plan.md)
+- [x] [P] T017 Entrypoint `StokeClient` skeleton (.NET): equivalente (`dotnet/Foundry.Stoke/StokeClient.cs`) (plan.md)
 
 ---
 
@@ -70,7 +70,7 @@ usar `DefaultAzureCredential` primário). Componente: session lifecycle / `Sessi
 - [x] [P] T022 `SessionController` (.NET) atrás da porta `ISessionOperations` (create/get/list/stop/delete); `StatusTranslator` case-insensitive sobre a taxonomia oficial + `UNKNOWN`; resume derivado idle->active (`dotnet/Foundry.Stoke/Session/SessionController.cs`) (US1, FR-001, FR-002, ADR 0002, ADR 0005). Adapter REST real fica fora desta fatia (seam vivo).
 - [x] [P] T023 Validação de idle timeout 5-60 min + erro tipado (.NET) (`dotnet/Foundry.Stoke/Session/SessionController.cs`) (US1, FR-004, CC-002)
 - [x] [P] T024 Stop/Delete + erro determinístico em sessão encerrada (.NET) (`dotnet/Foundry.Stoke/Session/SessionController.cs`) (US1, FR-003, FR-005)
-- [ ] T025 Spans `stoke.session.create/get/stop/delete` na camada de sessão (Python + .NET) (`python/foundry_stoke/session/`, `dotnet/Foundry.Stoke/Session/`) (FR-024, plan.md Observabilidade)
+- [x] T025 Spans `stoke.session.create/get/stop/delete` na camada de sessão (Python + .NET) (`python/foundry_stoke/session/`, `dotnet/Foundry.Stoke/Session/`) (FR-024, plan.md Observabilidade)
 
 ---
 
@@ -91,8 +91,8 @@ Independente de US1 (pode iniciar em paralelo). Componente: durable store.
 - [x] [P] T036 [SEC-001] Sanitização de path no `FileSystemStore` (.NET): hash estável + `Path.GetFullPath` confinado à base, rejeitar chaves inválidas/nomes reservados (`dotnet/Foundry.Stoke/Store/FileSystemStore.cs`) (ADR 0001, SEC-001)
 - [x] [P] T037 [SEC-002] Desserialização segura por schema (.NET): `System.Text.Json` sem `TypeNameHandling`, allowlist de `type`, arquivo corrompido com erro tipado, limite de tamanho (`dotnet/Foundry.Stoke/Store/FileSystemStore.cs`) (ADR 0001, SEC-002)
 - [x] [P] T038 [SEC-006] Ciclo read-check-etag-write sob lock (`FileStream` com `FileShare.None`) + timeout de aquisição (.NET) (`dotnet/Foundry.Stoke/Store/FileSystemStore.cs`) (ADR 0001, SEC-006)
-- [ ] T039 Teste de inspeção de dependências: core sem SDK do Cosmos em nenhum caminho (Python + .NET) (`python/tests/test_no_cosmos_dependency.py`, `dotnet/Foundry.Stoke.Tests/NoCosmosDependencyTests.cs`) (US2, FR-011, SC-002, CC-004, invariante)
-- [ ] T040 Spans `stoke.store.read/write` na camada de store (Python + .NET) (`python/foundry_stoke/store/`, `dotnet/Foundry.Stoke/Store/`) (FR-024)
+- [x] T039 Teste de inspeção de dependências: core sem SDK do Cosmos em nenhum caminho (Python + .NET) (`python/tests/test_no_cosmos_dependency.py`, `dotnet/Foundry.Stoke.Tests/NoCosmosDependencyTests.cs`) (US2, FR-011, SC-002, CC-004, invariante)
+- [x] T040 Spans `stoke.store.read/write` na camada de store (Python + .NET) (`python/foundry_stoke/store/`, `dotnet/Foundry.Stoke/Store/`) (FR-024)
 
 ---
 
@@ -110,7 +110,7 @@ Componente: warm-up.
 - [x] [P] T047 `KeepaliveStrategy` (.NET): loop não-bloqueante dirigido pelo `IClock` injetado (espelha o loop asyncio do Python em vez de `BackgroundService`/`PeriodicTimer`, mantendo a lib sem dependências) + probe do usuário (CC-007) (`dotnet/Foundry.Stoke/Warmup/KeepaliveStrategy.cs`) (US3, FR-013, ADR 0003)
 - [x] [P] T048 `PreProvisionPoolStrategy` (.NET): pool por definição, reabastecimento até `targetSize`, `WarmPoolRegistry` no store, `_filter_ready` evicta terminais + Unknown (`dotnet/Foundry.Stoke/Warmup/PreProvisionPoolStrategy.cs`) (US3, FR-014, FR-015, CC-006)
 - [x] [P] T049 [SEC-007] Teto de `targetSize` + backoff exponencial/full jitter + teto de tentativas + métrica `stoke.warmup.refill` (.NET) (`dotnet/Foundry.Stoke/Warmup/PreProvisionPoolStrategy.cs`) (ADR 0003, SEC-007)
-- [ ] T050 Spans `stoke.warmup.probe/refill` na camada de warm-up (Python + .NET) (`python/foundry_stoke/warmup/`, `dotnet/Foundry.Stoke/Warmup/`) (FR-024)
+- [x] T050 Spans `stoke.warmup.probe/refill` na camada de warm-up (Python + .NET) (`python/foundry_stoke/warmup/`, `dotnet/Foundry.Stoke/Warmup/`) (FR-024)
 
 ---
 
@@ -253,6 +253,23 @@ flowchart TD
 
 ## Reasoning Log
 
+- **2026-09-10: T017, composição .NET com operações obrigatórias.** Usuário aprovou a
+  implementação com `C` e confirmou a alternativa `A`: exigir `ISessionOperations` não nulo
+  na construção. Princípio: detectar configuração incompleta imediatamente. A alternativa
+  de fachada apenas para store com falha tardia foi descartada conscientemente; os stores
+  continuam disponíveis para uso independente. Confiança alta; entendimento confirmado.
+  `StokeClient` compõe `StokeOptions`, validação de endpoint, `CredentialProvider`, store
+  injetado ou `InMemoryStore` isolado por cliente e um `SessionController` persistente.
+  `FromEnvironment` usa a mesma validação e fonte de ambiente para fallback de credenciais.
+  Idle timeout permanece configurável por operação em `Sessions.CreateSessionAsync`.
+  Sem adapter Azure, dependências novas, alterações Python, telemetria ou mudança dos ADRs
+  Proposed. Nenhuma outra task foi encerrada.
+- **Verificação T017:** baseline .NET de 84 testes; 23 casos novos pela fachada; suíte Release
+  com 107 aprovados, zero falhas e zero ignorados. `dotnet format --verify-no-changes` limpo;
+  diagnósticos do editor sem erros. Cobertura de linhas de `StokeOptions` e `StokeClient`: 100%;
+  branches de `StokeClient`: 87,5% (caminho de ambiente do processo não exercitado pelos testes
+  com mapa isolado). Revisão independente pendente pelo conductor. Sem branch, commit, push
+  ou alterações de board nesta execução.
 - **2026-08-21 — Organização por User Story + componente, para py e .NET.** Seguindo
   tasks.instructions e o pedido do conductor, cada US (P1..P3) é uma fase com tracer bullet;
   dentro de cada uma, os pares Python/.NET são paralelos e ancorados em fixtures agnósticas.
@@ -284,7 +301,7 @@ Parciais (Python) — completadas apenas na parte do incremento; restante em abe
 
 - T001 — completo: `python/` (src layout), `conformance/` e `dotnet/` scaffolded com READMEs.
 - T039 — teste Python de ausência de SDK de store (`tests/test_no_cosmos_dependency.py`) feito;
-  contraparte .NET pendente.
+  contraparte .NET concluída em 2026-09-10, conforme registro T039 abaixo.
 - T052 — `CredentialProvider` caminho primário (`DefaultAzureCredential` + injeção de
   `TokenCredential`) feito; precedência de fallback por API key/connection string adiada
   (extension point deixado em `resolve_credential`).
@@ -443,3 +460,248 @@ sdist inclui LICENSE, NOTICE, README, PKG-INFO; wheel METADATA com `License-Expr
 produz SBOM CycloneDX válido (68 componentes no ambiente de teste). `ruff`/`ruff format
 --check`/`mypy --strict` limpos; `pytest` 129 passed. Nenhuma publicação real executada
 (requer o setup manual do Trusted Publisher e uma tag).
+
+### T039: inspeção de dependências do core (2026-09-10)
+
+- Concluído o teste .NET em `dotnet/Foundry.Stoke.Tests/NoCosmosDependencyTests.cs`.
+  Inspeciona declarações XML de `PackageReference`/`Reference` no projeto do core e
+  dependências diretas e transitivas no `obj/project.assets.json` gerado pelo restore.
+  Examina todos os frameworks presentes nesses metadados, sem incluir pacotes do projeto
+  de testes. O teste Python existente permaneceu inalterado.
+- Decisão aprovada: usar parsers padrão de XML/JSON e metadados de build do core.
+  Referências de assemblies carregados isoladamente não detectariam pacotes sem uso.
+  A inspeção depende do checkout e de restore atualizado no diretório `obj` padrão.
+  Confiança alta, com controles negativos executados; nenhuma dependência adicionada.
+- Controles negativos: seis casos em memória verificam rejeição de declaração sem uso
+  e dependência transitiva, incluindo Cosmos, Cosmos Direct em minúsculas, DocumentDB,
+  Table e Redis. Cada caso exige `DoesNotContainException` da mesma asserção usada na
+  inspeção real. Nenhum SDK instalado e nenhum metadado em disco adulterado.
+- Baseline .NET: `dotnet test dotnet/Foundry.Stoke.sln --no-restore --verbosity minimal`,
+  107/107 aprovados. Verificação focada com filtro `FullyQualifiedName~NoCosmosDependencyTests`:
+  8/8 aprovados. Suíte completa após restore: 115/115 aprovados, sem falhas ou skips.
+- `dotnet format dotnet/Foundry.Stoke.sln --verify-no-changes --no-restore` e
+  `git diff --check` aprovados. IDE sem diagnósticos no novo arquivo.
+- Python: `PYTHONPATH="$PWD/python/src" /Users/deividfoggi/coding/hosted-agent-instance/python/.venv/bin/python -m pytest python/tests/test_no_cosmos_dependency.py -v -p no:cacheprovider`,
+  executado da raiz do repositório: 1/1 aprovado com Python 3.14.6 e pytest 9.1.1.
+  Usado ambiente local existente, sem instalação. Essa execução verifica imports do core;
+  não executa a suíte Python completa nem a matriz de versões e não adiciona inspeção
+  de metadados de dependências ao teste Python.
+- Alterações anteriores de T017 preservadas. Sem branch, commit, push ou atualização de board.
+
+### T025: tracing assíncrono de sessão (2026-09-10)
+
+- Estado: implementação e verificações locais concluídas. Checkbox mantido aberto até a
+  revisão independente de código e segurança pelo conductor. Nenhuma revisão independente
+  é declarada como concluída nesta execução.
+- Implementados somente `stoke.session.create`, `stoke.session.get`, `stoke.session.stop`
+  e `stoke.session.delete` em Python e .NET, envolvendo validação, await, tradução de
+  status e atualização do ciclo de vida. Spans herdam e restauram o contexto pai, encerram
+  em sucesso, erro e cancelamento, preservando as exceções e os tokens de cancelamento.
+- Decisão aprovada no ADR 0006 e no plano: Python usa helper interno e extra `tracing`
+  com `opentelemetry-api>=1.27,<2`; `opentelemetry-sdk>=1.27,<2` fica somente em `dev`.
+  .NET usa `ActivitySource` do framework. Confiança alta, aprovação herdada do conductor.
+  API obrigatória e tracer público injetado permanecem descartados conforme a decisão
+  aprovada. O ADR continua Proposed.
+- Redação antes da emissão: get/stop/delete usam a política existente em nível info para
+  hashear handles, inclusive em falhas. Create omite o handle. Identificadores livres,
+  conteúdo de sessão e texto de exceção são omitidos. Erro e cancelamento registram apenas
+  status de erro, sem eventos automáticos, mensagens, stack traces ou descrições de status.
+  Essa redução de contexto diagnóstico preserva a confidencialidade dos dados recebidos.
+- APIs públicas e callbacks existentes preservados. A aplicação continua responsável por
+  providers, listeners, exporters e amostragem. Sem API/provider em Python ou listener em
+  .NET, tracing é no-op. Store, warmup e integração de recursos não foram instrumentados.
+- Cobertura comportamental: 19 testes Python com SDK real, exporter em memória e processor
+  que verifica atributos no início do span; 17 testes .NET com `ActivityListener` real.
+  Inclui quatro operações em sucesso/erro/cancelamento, contexto durante await e restauração,
+  falha de validação/tradução, sessão encerrada, retry após delete malsucedido, redação,
+  list sem instrumentação e no-op. O teste inicial de criação Python e os testes .NET
+  falharam por ausência de spans antes da implementação e passaram após a mudança.
+- Python 3.14.6, pytest 9.1.1, OpenTelemetry API/SDK 1.44.0 no ambiente local `python/.venv`.
+  Da pasta `python`, `.venv/bin/python -m pytest -rs`: 148 aprovados, um módulo opcional
+  ignorado porque `azure.ai.projects` não está instalado. Nenhum teste de tracing ignorado.
+  `.venv/bin/python -m pytest tests/test_session_tracing.py`: 19 aprovados.
+  `.venv/bin/python -m ruff check .`, `.venv/bin/python -m ruff format --check .` e
+  `.venv/bin/python -m mypy`: aprovados; 40 arquivos formatados e 23 fontes sem erro de tipos.
+- Baseline Python completo e regressão sem OpenTelemetry: 134 aprovados no ambiente
+  `/Users/deividfoggi/coding/hosted-agent-instance/python/.venv/bin/python`, com `PYTHONPATH`
+  apontando para `python/src`. A regressão executou `-m pytest python/tests
+  --ignore=python/tests/test_session_tracing.py`, incluindo os testes do adapter Foundry.
+  O novo arquivo usa subprocesso com `-S` para comprovar execução sem a API instalada.
+- Metadados reconstruídos com `python/.venv/bin/python -m pip install --no-deps -e python`.
+  Inspeção via `importlib.metadata` e `packaging.requirements.Requirement` confirmou zero
+  dependências obrigatórias, somente `opentelemetry-api` no extra tracing e SDK em dev.
+  O CI existente instala dev e executa pytest, incluindo os novos testes sem alteração do workflow.
+- Da raiz, `dotnet build dotnet/Foundry.Stoke.sln --configuration Release --no-restore`:
+  aprovado. `dotnet test dotnet/Foundry.Stoke.sln --configuration Release --no-build
+  --verbosity minimal`: 132 aprovados, zero falhas/skips; baseline 115 aprovados.
+  Filtro `FullyQualifiedName~SessionTracingTests`: 17 aprovados.
+  `dotnet format dotnet/Foundry.Stoke.sln --verify-no-changes --no-restore`: aprovado.
+  IDE sem diagnósticos nos arquivos de código modificados; `git diff --check` aprovado.
+- Matriz CI Python 3.10 a 3.13 não executada localmente. Revisão independente e consulta
+  de advisories ficam para o conductor; APIs verificadas por assinatura instalada e testes.
+  Alterações anteriores de T017/T039 e emendas aprovadas preservadas. Sem branch, commit,
+  push, board ou alteração de status dos ADRs.
+
+### T025: conclusão após revisões independentes (2026-09-10)
+
+- T025 concluída após `devsquad.review` e `devsquad.security` retornarem `PASSED`, ambos
+  sem achados. Este registro encerra as pendências de revisão do registro anterior.
+- Revisão de código: build independente aprovado, 24 testes .NET focados e 42 testes
+  Python de sessão/telemetria aprovados; diagnósticos e `git diff --check` limpos.
+- Revisão de segurança: 19 testes Python de tracing e 12 casos de fronteira de
+  sampler/processor em memória aprovados, cobrindo quatro operações em sucesso, erro e
+  cancelamento. Consulta de advisories sem resultados somente para as versões instaladas
+  de `opentelemetry-api` e `opentelemetry-sdk` 1.44.0; não constitui auditoria completa.
+- Sem verificação de exporter de produção, serviço real ou matriz de versões Python.
+  Somente o checkbox T025 foi encerrado; alterações anteriores e ADRs Proposed preservados.
+
+### T040: tracing dos providers de referência (2026-09-10)
+
+- Estado: implementação e verificações locais concluídas. Checkbox T040 mantido aberto
+  para revisão independente de código e segurança pelo conductor. Essas revisões não
+  foram executadas neste incremento.
+- Escopo aprovado pelo usuário: spans reais `stoke.store.read` para read e consulta por
+  partição; `stoke.store.write` para create/upsert/delete, nos providers InMemory e
+  FileSystem de Python e .NET. Um span por operação pública, sem spans adicionais nas
+  leituras internas de upsert/delete/query. Referência: FR-024 e tabela do plano.
+- Reuso da integração existente: decorator interno tipado no helper Python e wrapper
+  assíncrono interno `StoreTracing` em .NET, compartilhando a origem `Foundry.Stoke` e
+  a redação de `SessionTracing`. Sem nova dependência, exporter ou API pública.
+  Princípio: centralizar o ciclo de tracing sem modificar locks, concorrência por etag
+  ou serialização. Alternativa descartada: wrapper público para providers arbitrários,
+  pois ampliaria o contrato fora do escopo aprovado. Confiança alta; aprovação herdada
+  do conductor. Instrumentação automática de providers externos não foi adicionada.
+- Somente `stoke.store.provider`, com rótulos constantes `in_memory` e `file_system`,
+  passa pela allowlist antes da amostragem/início. IDs, partições, filtros livres, etags,
+  caminhos, payloads e segredos não entram nos spans. Falhas e cancelamento produzem
+  status de erro sem descrição, eventos de exceção ou stack traces. Essa restrição
+  reduz o contexto diagnóstico e preserva a confidencialidade, conforme aprovação.
+- Testes iniciais em ambas as linguagens falharam por ausência de spans nos dois
+  providers antes da implementação. Cobertura nova: 23 testes Python e 13 testes .NET
+  com spans reais, nomes, atributos antes da amostragem, resultados, conflitos, ausência
+  de registros, corrupção de arquivo, identidade da exceção, cancelamento, contexto
+  pai/restauração, duração e no-op. Python verifica contexto na thread de I/O; .NET
+  verifica operação em andamento por serialização bloqueada com gate de teste.
+- Correções durante a validação: o decorator Python preserva o retorno Coroutine exigido
+  pelo Protocol; a coleção .NET de tracing de store não roda em paralelo, evitando que
+  listeners globais de testes capturem spans da suíte de sessão.
+- Baselines atuais: Python 148 aprovados, um módulo Azure opcional ignorado; .NET 132
+  aprovados. Após T040: Python 171 aprovados, um módulo ignorado pela ausência de
+  `azure.ai.projects`, sem ignorar testes de tracing; .NET Release 145 aprovados, sem
+  falhas ou skips. Verificações focadas de store e sessão: Python 42; .NET 30.
+- Python: `.venv/bin/python -m pytest -o addopts='' -q -rs`, `ruff check .`,
+  `ruff format --check .` e `mypy` aprovados; 41 arquivos formatados e 23 fontes tipadas.
+  No ambiente existente sem OpenTelemetry, 134 regressões aprovadas, incluindo adapter
+  Azure, excluindo apenas os dois módulos de tracing já executados no ambiente principal.
+  Subprocessos dos testes novos também validam CRUD/erros sem API e sem provider.
+- .NET: `dotnet build dotnet/Foundry.Stoke.sln --configuration Release --no-restore`,
+  `dotnet test dotnet/Foundry.Stoke.sln --configuration Release --no-build --no-restore
+  --verbosity minimal` e `dotnet format dotnet/Foundry.Stoke.sln --no-restore
+  --verify-no-changes` aprovados. Diagnósticos IDE e `git diff --check` limpos.
+- Limites: sem exporter de produção, serviço real, matriz CI ou nova consulta de
+  advisories. Sem mudança na semântica preexistente de cancelamento de threads de I/O;
+  .NET verifica tokens previamente cancelados em todas as operações. Aplicação mantém
+  controle de providers/listeners/exporters. T050 e providers externos permanecem fora.
+- Alterações anteriores preservadas, incluindo controllers de sessão e teste de ausência
+  de Cosmos. Sem branch, commit, push, board, mudança de status de ADR ou alteração dos
+  registros históricos que delimitam o escopo de T025.
+
+### T040: conclusão após revisões independentes (2026-09-10)
+
+- T040 concluída com aprovação do usuário após duas revisões independentes, de
+  comportamento e segurança, ambas `PASSED`, sem achados. Este registro encerra a
+  pendência de revisão do registro anterior.
+- Comportamento: build novo do código .NET atual aprovado; 30 testes de tracing de
+  store/sessão, 10 `Category=Store` e 14 `StoreConformance` aprovados. Python: 42 testes
+  de tracing de store/sessão e 29 de contrato de store/filesystem aprovados.
+  Diagnósticos e verificação de diff limpos.
+- Segurança: 47 testes Python de tracing/redação e 30 testes .NET Release aprovados;
+  esta revisão .NET usou binários existentes, mais recentes que os fontes. Confirmadas
+  redação antes dos samplers, somente rótulos constantes de provider e ausência de
+  detalhes de registros, payloads, caminhos, etags e exceções; locks preservados.
+- Suítes completas do implementador: 171 testes Python aprovados, um módulo Azure
+  opcional ignorado; 145 testes .NET aprovados. Lint, tipos, formatação e build aprovados,
+  conforme registro anterior; essas suítes completas não foram reexecutadas pelos revisores.
+- Limites: matriz de versões e exporters não foram revalidados independentemente.
+  Cancelamento .NET cobre tokens previamente cancelados, sem comprovar cancelamento
+  sob contenção; Python usa gate antes do despacho, sem comprovar interrupção de I/O
+  em andamento. A semântica subjacente de cancelamento permanece inalterada.
+
+### T050: tracing das estratégias de warm-up (2026-09-10)
+
+- Estado: implementação e verificações locais concluídas; checkbox T050 permanece aberto
+  para revisão independente pelo conductor. Aprovação de escopo herdada da resposta C
+  do usuário. Nenhuma revisão independente foi executada neste incremento.
+- Escopo: um span `stoke.warmup.probe` por invocação efetiva do probe no keepalive e
+  um `stoke.warmup.refill` por reconciliação completa do pool, incluindo registro,
+  consultas, tentativas e backoff. Referências: FR-024, tabela de Observabilidade do plano
+  e contratos de warm-up. Sem duplicação de spans nos adaptadores de probe.
+- Python: alterações em [keepalive.py](../../../python/src/foundry_stoke/warmup/keepalive.py),
+  [pool.py](../../../python/src/foundry_stoke/warmup/pool.py) e
+  [_tracing.py](../../../python/src/foundry_stoke/_tracing.py); testes novos em
+  [test_warmup_tracing.py](../../../python/tests/test_warmup_tracing.py).
+- .NET: alterações em [KeepaliveStrategy.cs](../../../dotnet/Foundry.Stoke/Warmup/KeepaliveStrategy.cs)
+  e [PreProvisionPoolStrategy.cs](../../../dotnet/Foundry.Stoke/Warmup/PreProvisionPoolStrategy.cs);
+  novos [WarmupTracing.cs](../../../dotnet/Foundry.Stoke/Observability/WarmupTracing.cs) e
+  [WarmupTracingTests.cs](../../../dotnet/Foundry.Stoke.Tests/WarmupTracingTests.cs).
+- Decisão: reutilizar tracing interno opcional, com marcador explícito de falha tratada.
+  O helper Python mantém o comportamento dos consumidores de sessão/store; o helper .NET
+  reutiliza a origem `Foundry.Stoke` e a redação existente. Princípio: observar a operação
+  sem alterar seus resultados. Alternativas descartadas: novo tracer público, dependência
+  obrigatória ou span por tentativa, pois ampliariam o contrato ou duplicariam a operação.
+  Confiança alta, sustentada pelo escopo aprovado e pelos testes reais.
+- Refinamento da hipótese inicial: capturar somente exceções propagadas não basta.
+  `ok=False`, falhas de criação mesmo com recuperação posterior e consultas que falham
+  e viram evicções marcam o span como erro. Contadores, retornos, callbacks, limites,
+  jitter, persistência e scheduling mantêm a semântica anterior.
+- Somente `stoke.warmup.strategy`, com valores constantes, chega à amostragem/início.
+  IDs de agente/sessão, payloads, caminhos e mensagens de erro são omitidos; status de
+  erro não inclui descrição, evento automático de exceção ou stack trace. A omissão
+  reduz contexto diagnóstico e evita expor entradas livres. Callbacks legados continuam
+  seguindo sua política anterior; as garantias dos spans são verificadas separadamente.
+- TDD: dois casos de probe e dois de refill falharam por ausência de spans em cada
+  linguagem antes da implementação correspondente. Novos testes: 26 Python e 28 .NET,
+  cobrindo sucesso, falha tratada/propagada, cancelamento, no-op, trabalho vazio,
+  recuperação/teto de tentativas, jitter, callbacks e aninhamento de sessão/store.
+  Gates assíncronos e `VirtualClock` verificam duração e restauração de contexto sem sleeps.
+- Baseline local: 13 testes Python de warm-up passaram antes da alteração de produção;
+  a suíte Python completa anterior de 171 testes é histórica. Baseline .NET reexecutada:
+  145 aprovados. Verificação focada final: 81 Python e 66 .NET, incluindo regressões dos
+  helpers de sessão/store e conformidade de warm-up.
+- Suítes completas: `.venv/bin/python -m pytest -o addopts='' -q -rs` resultou em 197
+  aprovados e um módulo opcional ignorado por ausência de `azure.ai.projects`;
+  `dotnet test ../dotnet/Foundry.Stoke.sln --no-restore --configuration Release
+  --verbosity minimal` compilou Release e aprovou 173 testes, sem skips.
+- Ambiente existente sem OpenTelemetry: Python de
+  `/Users/deividfoggi/coding/hosted-agent-instance/python/.venv/bin/python`, com
+  `PYTHONPATH` apontando para os fontes atuais, aprovou 134 regressões, incluindo Azure.
+  Somente os três módulos de tracing foram excluídos nesse ambiente; todos foram
+  executados no ambiente principal. Subprocessos também provaram warm-up sem API e sem
+  provider configurado, sem instalar dependências globais ou de produção.
+- Gates aprovados: `ruff check .`, `ruff format --check .` (42 arquivos), `mypy src`
+  (23 fontes), `dotnet format ../dotnet/Foundry.Stoke.sln --verify-no-changes --no-restore`,
+  diagnósticos IDE e `git diff --check`. Ajustes de validação limitados à formatação dos
+  novos testes Python e à quebra de linha final dos novos arquivos .NET.
+- Limites preservados: Python propaga cancelamento; .NET trata cancelamento lançado por
+  probe/criação/consulta como falha ou evicção, enquanto cancelamento no registro/backoff
+  pode propagar. O stop do scheduler .NET não cancela operações de probe/sessão em andamento.
+  Não foram alteradas essas regras, callbacks legados ou a responsabilidade da aplicação
+  por providers/listeners/exporters. Sem validação de exporter real, serviço remoto,
+  matriz CI ou nova consulta de advisories.
+- Execução direta porque o worker interno não estava disponível. Sem branch, commit,
+  push ou board. Alterações anteriores preservadas, incluindo helper/testes de store e
+  controllers de sessão; nenhum ADR, registro histórico de T025 ou outro checkbox mudou.
+
+### T050: conclusão após revisões independentes (2026-09-10)
+
+- T050 concluída após revisões independentes de comportamento e segurança, ambas
+  `PASSED`, sem achados. Este registro encerra a pendência de revisão anterior.
+- Comportamento: 86 testes Python e 66 testes .NET aprovados, com novo build Release.
+  Segurança: 44 testes Python e 66 testes .NET aprovados.
+- Suítes completas do implementador: 197 testes Python aprovados, um módulo Azure
+  opcional ignorado; 173 testes .NET Release aprovados. Regressão sem OpenTelemetry:
+  134 testes Python aprovados, incluindo Azure. Lint, tipos, formatação e build aprovados,
+  conforme registro anterior; esses totais completos não representam novas execuções
+  dos revisores.
+- Limites: sem serviço Azure real, exporter de produção ou matriz CI. Sem mudança na
+  semântica de cancelamento, nos demais checkboxes ou no status Proposed dos ADRs.
