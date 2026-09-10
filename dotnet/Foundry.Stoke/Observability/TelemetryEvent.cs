@@ -2,8 +2,8 @@ namespace Foundry.Stoke.Observability;
 
 /// <summary>
 /// A telemetry event ready to be exported. Mirror of the Python
-/// <c>TelemetryEvent</c>. Attribute values are carried as-is in this slice;
-/// allowlist redaction (SEC-003/SEC-009) is deferred to the telemetry slice.
+/// <c>TelemetryEvent</c>. Its attributes have already passed through
+/// <see cref="Redaction"/> (SEC-003/SEC-009) by the time it reaches a sink.
 /// </summary>
 public sealed class TelemetryEvent
 {
