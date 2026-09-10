@@ -188,6 +188,9 @@ async def test_async_lifetime_context_and_failures(tracing, kind, outcome):
     async def invoke():
         try:
             return await strategy.reconcile()
+        except asyncio.CancelledError as error:
+            assert error.args == ("AccountKey=private-key",)
+            raise
         finally:
             restored.append(trace.get_current_span())
 
@@ -206,9 +209,8 @@ async def test_async_lifetime_context_and_failures(tracing, kind, outcome):
                 task.cancel("AccountKey=private-key")
             release.set()
             if outcome == "cancel":
-                with pytest.raises(asyncio.CancelledError) as caught:
+                with pytest.raises(asyncio.CancelledError):
                     await task
-                assert caught.value.args == ("AccountKey=private-key",)
                 assert task.cancelled()
             else:
                 report = await task

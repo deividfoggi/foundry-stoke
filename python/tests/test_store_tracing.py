@@ -227,6 +227,9 @@ async def test_span_covers_suspension_and_restores_context(
     async def invoke():
         try:
             return await provider.query_by_partition("private-partition")
+        except asyncio.CancelledError as error:
+            assert error.args == ("AccountKey=private-key",)
+            raise
         finally:
             restored.append(trace.get_current_span())
 
@@ -242,9 +245,8 @@ async def test_span_covers_suspension_and_restores_context(
                 task.cancel("AccountKey=private-key")
             release.set()
             if cancel:
-                with pytest.raises(asyncio.CancelledError) as caught:
+                with pytest.raises(asyncio.CancelledError):
                     await task
-                assert caught.value.args == ("AccountKey=private-key",)
                 assert task.cancelled()
             else:
                 assert await task == []
